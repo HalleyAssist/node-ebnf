@@ -274,14 +274,15 @@ namespace BNF {
   function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, parentAttributes: any) {
     let anterior = null;
     let bnfSeq = [];
+    const children = seq.children;
 
-    for (const [i, x] of seq.children.entries()) {
+    for (let i = 0; i < children.length; i++) {
+      const x = children[i];
       if (x.type == 'Minus') {
         restar(anterior, x);
-      } else {
       }
 
-      let decoration: any = seq.children[i + 1];
+      let decoration: any = children[i + 1];
       decoration = (decoration && decoration.type == 'PrimaryDecoration' && decoration.text) || '';
 
       let preDecoration = '';
@@ -309,16 +310,16 @@ namespace BNF {
           break;
         case 'StringLiteral':
           if (decoration || preDecoration || !/^['"/()a-zA-Z0-9&_.:=,+*\-\^\\]+$/.test(x.text)) {
-             bnfSeq.push(preDecoration + x.text + decoration);
+            bnfSeq.push(preDecoration + x.text + decoration);
           } else {
-             for (const c of x.text.slice(1, -1)) {
+            for (const c of x.text.slice(1, -1)) {
                 if (parentAttributes && parentAttributes["ignoreCase"] == "true" && /[a-zA-Z]/.test(c)) {
-                   bnfSeq.push(new RegExp("[" + c.toUpperCase() + c.toLowerCase() + "]"));
+                  bnfSeq.push(new RegExp("[" + c.toUpperCase() + c.toLowerCase() + "]"));
                 }
                 else {
-                   bnfSeq.push(new RegExp(escapeRegExp(c)));
+                  bnfSeq.push(new RegExp(escapeRegExp(c)));
                 }
-             }
+            }
           }
           break;
         case 'CharCode':
