@@ -41,7 +41,6 @@ terminal.glue
 
 *.pem
 *.zip
-dist
 .alm
 test/*.js
 
