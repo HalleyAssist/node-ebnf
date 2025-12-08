@@ -275,8 +275,7 @@ namespace BNF {
     let anterior = null;
     let bnfSeq = [];
 
-    for (let i = 0; i < seq.children.length; i++) {
-      const x = seq.children[i];
+    for (const [i, x] of seq.children.entries()) {
       if (x.type == 'Minus') {
         restar(anterior, x);
       } else {
