@@ -60,19 +60,35 @@ export function escapeRegExp(str) {
 
 function fixRest(token: IToken) {
   token.rest = '';
-  token.children && token.children.forEach(c => fixRest(c));
+  if (token.children) {
+    for (const c of token.children) {
+      fixRest(c);
+    }
+  }
 }
 
 function fixPositions(token: IToken, start: number) {
   token.start += start;
   token.end += start;
-  token.children && token.children.forEach(c => fixPositions(c, token.start));
+  if (token.children) {
+    for (const c of token.children) {
+      fixPositions(c, token.start);
+    }
+  }
 }
 
 function agregateErrors(errors: any[], token: IToken) {
-  if (token.errors && token.errors.length) token.errors.forEach(err => errors.push(err));
+  if (token.errors && token.errors.length) {
+    for (const err of token.errors) {
+      errors.push(err);
+    }
+  }
 
-  token.children && token.children.forEach(tok => agregateErrors(errors, tok));
+  if (token.children) {
+    for (const tok of token.children) {
+      agregateErrors(errors, tok);
+    }
+  }
 }
 export function parseRuleName(name: string) {
   let postDecoration = decorationRE.exec(name);
@@ -117,7 +133,9 @@ function stripRules(token: IToken, re: RegExp) {
       }
     }
 
-    token.children.forEach(c => stripRules(c, re));
+    for (const c of token.children) {
+      stripRules(c, re);
+    }
   }
 }
 
@@ -141,12 +159,12 @@ export class Parser {
 
     let neededRules: string[] = [];
 
-    grammarRules.forEach(rule => {
+    for (const rule of grammarRules) {
       let parsedName = parseRuleName(rule.name);
 
       if (parsedName.name in this.cachedRules) {
         errors.push('Duplicated rule ' + parsedName.name);
-        return;
+        continue;
       } else {
         this.cachedRules[parsedName.name] = rule;
       }
@@ -156,7 +174,7 @@ export class Parser {
 
         if (errors.indexOf(error) == -1) errors.push(error);
       } else {
-        rule.bnf.forEach(options => {
+        for (const options of rule.bnf) {
           if (typeof options[0] === 'string') {
             let parsed = parseRuleName(options[0] as string);
             if (parsed.name == rule.name) {
@@ -166,7 +184,7 @@ export class Parser {
             }
           }
 
-          options.forEach(option => {
+          for (const option of options) {
             if (typeof option == 'string') {
               let name = parseRuleName(option);
               if (
@@ -176,8 +194,8 @@ export class Parser {
               )
                 neededRules.push(name.name);
             }
-          });
-        });
+          }
+        }
       }
 
       if (WS_RULE == rule.name) rule.implicitWs = false;
@@ -189,13 +207,13 @@ export class Parser {
       if (rule.recover) {
         if (neededRules.indexOf(rule.recover) == -1) neededRules.push(rule.recover);
       }
-    });
+    }
 
-    neededRules.forEach(ruleName => {
+    for (const ruleName of neededRules) {
       if (!(ruleName in this.cachedRules)) {
         errors.push('Missing rule ' + ruleName);
       }
-    });
+    }
 
     if (errors.length) throw new Error(errors.join('\n'));
   }
@@ -445,13 +463,14 @@ export class Parser {
 
                 if (!localTarget.lookupPositive && got.type) {
                   if (got.fragment) {
-                    got.children &&
-                      got.children.forEach(x => {
+                    if (got.children) {
+                      for (const x of got.children) {
                         x.start += position;
                         x.end += position;
                         x.parent = tmp;
                         tmp.children.push(x);
-                      });
+                      }
+                    }
                   } else {
                     got.parent = tmp;
                     tmp.children.push(got);
