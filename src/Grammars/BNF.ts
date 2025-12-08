@@ -199,9 +199,9 @@ namespace BNF {
       return findChildrenByType(term, 'literal').concat(findChildrenByType(term, 'rule-name'))[0].text;
     });
 
-    findChildrenByType(expr, 'list').forEach(expr => {
-      terms = terms.concat(getAllTerms(expr));
-    });
+    for (const exprItem of findChildrenByType(expr, 'list')) {
+      terms = terms.concat(getAllTerms(exprItem));
+    }
 
     return terms;
   }
@@ -224,9 +224,9 @@ namespace BNF {
 
       let bnf = [];
 
-      expressions.forEach(expr => {
+      for (const expr of expressions) {
         bnf.push(getAllTerms(expr));
-      });
+      }
 
       return {
         name: name,

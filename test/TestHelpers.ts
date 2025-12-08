@@ -59,10 +59,11 @@ function printAST(token: IToken, level = 0) {
   console.log(
     '         ' + '  '.repeat(level) + `|-${token.type}${token.children.length == 0 ? '=' + token.text : ''}`
   );
-  token.children &&
-    token.children.forEach(c => {
+  if (token.children) {
+    for (const c of token.children) {
       printAST(c, level + 1);
-    });
+    }
+  }
 }
 
 export function describeTree(token: IToken) {

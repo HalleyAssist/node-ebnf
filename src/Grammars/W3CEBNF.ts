@@ -211,13 +211,13 @@ namespace BNF {
   export function emit(parser: Parser): string {
     let acumulator: string[] = [];
 
-    parser.grammarRules.forEach(l => {
+    for (const l of parser.grammarRules) {
       if (!/^%/.test(l.name)) {
         let recover = l.recover ? ' /* { recoverUntil=' + l.recover + ' } */' : '';
 
         acumulator.push(l.name + ' ::= ' + getBNFBody(l.name, parser) + recover);
       }
-    });
+    }
 
     return acumulator.join('\n');
   }
@@ -243,7 +243,8 @@ namespace BNF {
     let anterior = null;
     let bnfSeq = [];
 
-    seq.children.forEach((x, i) => {
+    for (let i = 0; i < seq.children.length; i++) {
+      const x = seq.children[i];
       if (x.type == 'Minus') {
         restar(anterior, x);
       } else {
@@ -288,7 +289,7 @@ namespace BNF {
       }
 
       anterior = x;
-    });
+    }
 
     return bnfSeq;
   }
@@ -303,10 +304,10 @@ namespace BNF {
 
     let recover: string = null;
 
-    bnf.forEach(x => {
+    for (const x of bnf) {
       recover = recover || x['recover'];
       delete x['recover'];
-    });
+    }
 
     if (name.indexOf('%') == 0) rule.fragment = true;
 
