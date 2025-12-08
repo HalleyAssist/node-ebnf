@@ -242,14 +242,16 @@ namespace BNF {
   function getSubItems(tmpRules, seq: IToken, parentName: string) {
     let anterior = null;
     let bnfSeq = [];
+    const children = seq.children;
 
-    for (const [i, x] of seq.children.entries()) {
+    for (let i = 0; i < children.length; i++) {
+      const x = children[i];
+
       if (x.type == 'Minus') {
         restar(anterior, x);
-      } else {
       }
 
-      let decoration: any = seq.children[i + 1];
+      let decoration: any = children[i + 1];
       decoration = (decoration && decoration.type == 'PrimaryDecoration' && decoration.text) || '';
 
       let preDecoration = '';
