@@ -335,8 +335,8 @@ export class Parser {
       let options = targetLex.bnf;
 
       if (options instanceof Array) {
-        options.forEach(phases => {
-          if (out) return;
+        optionsLoop: for (const phases of options) {
+          if (out) break;
 
           let pinned: IToken = null;
 
@@ -403,12 +403,12 @@ export class Parser {
                 // rule ::= "true" ![a-zA-Z]
                 // negative lookup, if it does not match, we should continue
                 if (localTarget.lookupNegative) {
-                  if (got) return /* cancel this path */;
+                  if (got) continue optionsLoop; /* cancel this path */
                   break;
                 }
 
                 if (localTarget.lookupPositive) {
-                  if (!got) return;
+                  if (!got) continue optionsLoop;
                 }
 
                 if (!got) {
@@ -447,7 +447,7 @@ export class Parser {
                         new Array(recursion + 1).join('│  ') + '└─ ' + got.type + ' ' + JSON.stringify(got.text)
                       );
                   } else {
-                    return;
+                    continue optionsLoop;
                   }
                 }
 
@@ -497,7 +497,7 @@ export class Parser {
               let got = readToken(tmpTxt, phases[i] as RegExp);
 
               if (!got) {
-                return;
+                continue optionsLoop;
               }
 
               printable &&
@@ -528,7 +528,7 @@ export class Parser {
                 new Array(recursion).join('│  ') + '├<─┴< PUSHING ' + out.type + ' ' + JSON.stringify(out.text)
               );
           }
-        });
+        }
       }
 
       if (out && targetLex.simplifyWhenOneChildren && out.children.length == 1) {
