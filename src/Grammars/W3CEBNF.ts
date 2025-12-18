@@ -18,7 +18,7 @@
 // RULE_S	::=	#x9 | #xA | #xD | #x20
 // Comment	::=	'/*' ( [^*] | '*'+ [^*/] )* '*'* '*/'
 
-import { IRule, Parser as _Parser, IToken, findRuleByName } from '../Parser';
+import { IRule, Parser as _Parser, IToken, findRuleByName, escapeRegExp } from '../Parser';
 import { IGrammarParserOptions } from './types';
 
 namespace BNF {
@@ -34,7 +34,11 @@ namespace BNF {
     },
     {
       name: 'Production',
-      bnf: [['NCName', 'RULE_S*', '"::="', 'RULE_WHITESPACE*', 'Choice', 'RULE_WHITESPACE*', 'RULE_EOL+', 'RULE_S*']]
+      bnf: [['NCName', 'RULE_S*', 'ProductionOperator', 'RULE_WHITESPACE*', 'Choice', 'RULE_WHITESPACE*', 'RULE_EOL+', 'RULE_S*']]
+    },
+    {
+      name: 'ProductionOperator',
+      bnf: [['"::="'], ['"||="']]
     },
     {
       name: 'NCName',
@@ -229,17 +233,16 @@ namespace BNF {
     throw new Error('Difference not supported yet');
   }
 
-  function convertRegex(txt: string): RegExp {
-    return new RegExp(
-      txt
-        .replace(/#x([a-zA-Z0-9]{4})/g, '\\u$1')
-        .replace(/#x([a-zA-Z0-9]{3})/g, '\\u0$1')
-        .replace(/#x([a-zA-Z0-9]{2})/g, '\\x$1')
-        .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1')
-    );
+  function convertRegex(txt: string, caseInsensitive: boolean = false): RegExp {
+    const pattern = txt
+      .replace(/#x([a-zA-Z0-9]{4})/g, '\\u$1')
+      .replace(/#x([a-zA-Z0-9]{3})/g, '\\u0$1')
+      .replace(/#x([a-zA-Z0-9]{2})/g, '\\x$1')
+      .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
+    return new RegExp(pattern, caseInsensitive ? 'i' : '');
   }
 
-  function getSubItems(tmpRules, seq: IToken, parentName: string) {
+  function getSubItems(tmpRules, seq: IToken, parentName: string, caseInsensitive: boolean = false) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
@@ -260,27 +263,41 @@ namespace BNF {
         case 'SubItem':
           let name = '%' + (parentName + subitems++);
 
-          createRule(tmpRules, x, name);
+          createRule(tmpRules, x, name, caseInsensitive);
 
           bnfSeq.push(preDecoration + name + decoration);
           break;
         case 'NCName':
-        case 'StringLiteral':
           bnfSeq.push(preDecoration + x.text + decoration);
+          break;
+        case 'StringLiteral':
+          if (caseInsensitive) {
+            // For case insensitive string literals, convert each character to a case-insensitive regex
+            const literalText = x.text.slice(1, -1); // Remove quotes
+            for (const c of literalText) {
+              if (/[a-zA-Z]/.test(c)) {
+                bnfSeq.push(new RegExp('[' + c.toUpperCase() + c.toLowerCase() + ']'));
+              } else {
+                bnfSeq.push(new RegExp(escapeRegExp(c)));
+              }
+            }
+          } else {
+            bnfSeq.push(preDecoration + x.text + decoration);
+          }
           break;
         case 'CharCode':
         case 'CharClass':
           if (decoration || preDecoration) {
             let newRule = {
               name: '%' + (parentName + subitems++),
-              bnf: [[convertRegex(x.text)]]
+              bnf: [[convertRegex(x.text, caseInsensitive)]]
             };
 
             tmpRules.push(newRule);
 
             bnfSeq.push(preDecoration + newRule.name + decoration);
           } else {
-            bnfSeq.push(convertRegex(x.text));
+            bnfSeq.push(convertRegex(x.text, caseInsensitive));
           }
           break;
         case 'PrimaryDecoration':
@@ -295,8 +312,12 @@ namespace BNF {
     return bnfSeq;
   }
 
-  function createRule(tmpRules: IRule[], token: IToken, name: string) {
-    let bnf = token.children.filter(x => x.type == 'SequenceOrDifference').map(s => getSubItems(tmpRules, s, name));
+  function createRule(tmpRules: IRule[], token: IToken, name: string, caseInsensitive: boolean = false) {
+    // Check if this production uses the case insensitive operator ||=
+    const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
+    const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
+
+    let bnf = token.children.filter(x => x.type == 'SequenceOrDifference').map(s => getSubItems(tmpRules, s, name, isCaseInsensitive));
 
     let rule: IRule = {
       name,
