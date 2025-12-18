@@ -154,6 +154,42 @@ interface IToken {
 }
 ```
 
+## Case Insensitive Matching (W3C EBNF)
+
+W3C EBNF supports case insensitive matching using the `||=` operator instead of `::=`:
+
+```wbnf
+/* Case sensitive (default) */
+Keyword1          ::= 'SELECT' | 'FROM'
+
+/* Case insensitive */
+Keyword2          ||= 'SELECT' | 'FROM'
+```
+
+When using `||=`:
+- String literals match any case: `'SELECT'` matches `SELECT`, `select`, `SeLeCt`, etc.
+- Regex patterns get the `i` flag: `[a-z]+` becomes case insensitive
+- Character codes and classes are also case insensitive
+
+Example:
+
+```typescript
+import { Grammars } from 'ebnf';
+
+const grammar = `
+Statement         ||= 'SELECT' WS+ Column WS+ 'FROM' WS+ Table
+Column            ::= [a-zA-Z]+
+Table             ::= [a-zA-Z]+
+WS                ::= [ \\t\\n\\r]+
+`;
+
+let parser = new Grammars.W3C.Parser(grammar);
+
+parser.getAST('SELECT name FROM users');  // ✓ matches
+parser.getAST('select name from users');  // ✓ matches
+parser.getAST('SeLeCt name FrOm users');  // ✓ matches
+```
+
 ## Conventions
 
 We try to keep this tool as much unopinionated and free of conventions as possible. However, we have some conventions:
