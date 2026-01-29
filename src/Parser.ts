@@ -430,6 +430,27 @@ export class Parser {
     return false;
   }
 
+  /**
+   * Extracts the expected value from a terminal/literal rule name.
+   * - For string literals (quoted), removes the quotes and returns the content
+   * - For regex patterns, returns as-is
+   */
+  private extractExpectedValue(ruleName: string): string {
+    // If it's a string literal (starts with " or '), parse it to remove quotes
+    if (ruleName.startsWith('"')) {
+      try {
+        return JSON.parse(ruleName);
+      } catch {
+        return ruleName;
+      }
+    } else if (ruleName.startsWith("'")) {
+      // Single-quoted string - remove quotes
+      return ruleName.replace(/^'(.+)'$/, '$1').replace(/\\'/g, "'");
+    }
+    // For regex patterns and other terminals, return as-is
+    return ruleName;
+  }
+
   private buildFailureTree(tree: Map<string, Set<string>>, startRules?: string[]): IFailureTreeNode[] {
     const buildNode = (ruleName: string): IFailureTreeNode => {
       const node: IFailureTreeNode = { name: ruleName };
@@ -440,14 +461,14 @@ export class Parser {
           // If this rule has exactly one child and that child is a terminal,
           // set expected to that terminal instead of creating children
           if (children.length === 1 && this.isLiteralOrTerminal(children[0])) {
-            node.expected = children[0];
+            node.expected = this.extractExpectedValue(children[0]);
           } else {
             node.children = children.map(child => buildNode(child));
           }
         }
       } else if (this.isLiteralOrTerminal(ruleName)) {
         // If this is a terminal/literal with no children, set expected to itself
-        node.expected = ruleName;
+        node.expected = this.extractExpectedValue(ruleName);
       }
       
       return node;

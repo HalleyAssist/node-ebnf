@@ -66,6 +66,12 @@ export declare class Parser {
      * - Contains '[' or '#x' (regex pattern like [0-9] or #x20)
      */
     private isLiteralOrTerminal;
+    /**
+     * Extracts the expected value from a terminal/literal rule name.
+     * - For string literals (quoted), removes the quotes and returns the content
+     * - For regex patterns, returns as-is
+     */
+    private extractExpectedValue;
     private buildFailureTree;
     parse(txt: string, target: string, recursion?: number, offset?: number): IToken;
     private parseRecovery;

@@ -201,15 +201,15 @@ value ::= "true" | "false" | "null"
         // Verify that alternatives have the expected structure
         const objectNode = valueNode.children.find(node => node.name === 'object');
         expect(objectNode).toBeDefined();
-        expect(objectNode.expected).toBe('"{"');
+        expect(objectNode.expected).toBe('{');
         
         const arrayNode = valueNode.children.find(node => node.name === 'array');
         expect(arrayNode).toBeDefined();
-        expect(arrayNode.expected).toBe('"["');
+        expect(arrayNode.expected).toBe('[');
         
         const trueNode = valueNode.children.find(node => node.name === '"true"');
         expect(trueNode).toBeDefined();
-        expect(trueNode.expected).toBe('"true"');
+        expect(trueNode.expected).toBe('true');
       }
     });
 
