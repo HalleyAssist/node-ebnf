@@ -185,7 +185,7 @@ var BNF;
     }
     /// Returns true if the rule is a string literal or regular expression without a descendant tree
     function isLonelyRule(name, parser) {
-        let rule = Parser_1.findRuleByName(name, parser);
+        let rule = (0, Parser_1.findRuleByName)(name, parser);
         return (rule &&
             rule.bnf.length == 1 &&
             rule.bnf[0].length == 1 &&
@@ -195,7 +195,7 @@ var BNF;
         return rules.map(x => getBNFRule(x, parser)).join(' ');
     }
     function getBNFBody(name, parser) {
-        let rule = Parser_1.findRuleByName(name, parser);
+        let rule = (0, Parser_1.findRuleByName)(name, parser);
         if (rule)
             return rule.bnf.map(x => getBNFChoice(x, parser)).join(' | ');
         return 'RULE_NOT_FOUND {' + name + '}';
@@ -223,7 +223,7 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
         return new RegExp(pattern, caseInsensitive ? 'i' : '');
     }
-    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false, globalFragmentCounter) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false, isSingleSequence = false) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
@@ -243,33 +243,32 @@ var BNF;
                     subitemIndex++;
                     itemPosition++; // Increment position for SubItems
                     let name;
-                    if (globalFragmentCounter) {
-                        // Using global counter for single-sequence rules (both top-level and nested)
-                        // Use itemPosition instead of counter value for nested fragments to reflect actual position
+                    if (isSingleSequence) {
+                        // Single sequence: use position-based naming
                         if (isTopLevel) {
-                            name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                            name = '%' + parentName + '[' + itemPosition + ']';
                         }
                         else {
-                            // For nested fragments, use itemPosition to number by actual sequence position
                             name = parentName + '[' + itemPosition + ']';
                         }
                     }
-                    else if (isTopLevel) {
-                        // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
-                        if (subitemIndex === 1) {
-                            name = '%' + parentName + '[' + optionIndex + ']';
-                        }
-                        else {
-                            name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-                        }
-                    }
                     else {
-                        // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
-                        if (subitemIndex === 1) {
-                            name = parentName + '[' + optionIndex + ']';
+                        // Multiple sequences: use option-based naming
+                        if (isTopLevel) {
+                            if (subitemIndex === 1) {
+                                name = '%' + parentName + '[' + optionIndex + ']';
+                            }
+                            else {
+                                name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                            }
                         }
                         else {
-                            name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                            if (subitemIndex === 1) {
+                                name = parentName + '[' + optionIndex + ']';
+                            }
+                            else {
+                                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                            }
                         }
                     }
                     createRule(tmpRules, x, name, caseInsensitive);
@@ -289,7 +288,7 @@ var BNF;
                                 bnfSeq.push(new RegExp('[' + c.toUpperCase() + c.toLowerCase() + ']'));
                             }
                             else {
-                                bnfSeq.push(new RegExp(Parser_1.escapeRegExp(c)));
+                                bnfSeq.push(new RegExp((0, Parser_1.escapeRegExp)(c)));
                             }
                         }
                     }
@@ -303,33 +302,32 @@ var BNF;
                     if (decoration || preDecoration) {
                         subitemIndex++;
                         let name;
-                        if (globalFragmentCounter) {
-                            // Using global counter for single-sequence rules (both top-level and nested)
-                            // Use itemPosition for nested fragments to reflect actual position
+                        if (isSingleSequence) {
+                            // Single sequence: use position-based naming
                             if (isTopLevel) {
-                                name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                                name = '%' + parentName + '[' + itemPosition + ']';
                             }
                             else {
-                                // For nested fragments, use itemPosition to number by actual sequence position
                                 name = parentName + '[' + itemPosition + ']';
                             }
                         }
-                        else if (isTopLevel) {
-                            // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
-                            if (subitemIndex === 1) {
-                                name = '%' + parentName + '[' + optionIndex + ']';
-                            }
-                            else {
-                                name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-                            }
-                        }
                         else {
-                            // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
-                            if (subitemIndex === 1) {
-                                name = parentName + '[' + optionIndex + ']';
+                            // Multiple sequences: use option-based naming
+                            if (isTopLevel) {
+                                if (subitemIndex === 1) {
+                                    name = '%' + parentName + '[' + optionIndex + ']';
+                                }
+                                else {
+                                    name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                                }
                             }
                             else {
-                                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                                if (subitemIndex === 1) {
+                                    name = parentName + '[' + optionIndex + ']';
+                                }
+                                else {
+                                    name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                                }
                             }
                         }
                         let newRule = {
@@ -357,11 +355,9 @@ var BNF;
         const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
         const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        // Determine if we should use global counter (for rules with single sequence, both top-level and nested)
-        const isTopLevel = !name.startsWith('%');
-        const useSingleSequenceNaming = sequences.length === 1;
-        const globalFragmentCounter = useSingleSequenceNaming ? { value: 1 } : undefined;
-        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, globalFragmentCounter));
+        // Determine if this rule has a single sequence (no alternatives)
+        const isSingleSequence = sequences.length === 1;
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, isSingleSequence));
         let rule = {
             name,
             bnf

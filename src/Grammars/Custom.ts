@@ -269,7 +269,7 @@ namespace BNF {
     );
   }
 
-  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any, globalFragmentCounter?: {value: number}) {
+  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any, isSingleSequence: boolean = false) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
@@ -304,28 +304,27 @@ namespace BNF {
           itemPosition++; // Increment position for SubItems
           let name: string;
 
-          if (globalFragmentCounter) {
-            // Using global counter for single-sequence rules (both top-level and nested)
-            // Use itemPosition for nested fragments to reflect actual position
+          if (isSingleSequence) {
+            // Single sequence: use position-based naming
             if (isTopLevel) {
-              name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+              name = '%' + parentName + '[' + itemPosition + ']';
             } else {
-              // For nested fragments, use itemPosition to number by actual sequence position
               name = parentName + '[' + itemPosition + ']';
             }
-          } else if (isTopLevel) {
-            // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
-            if (subitemIndex === 1) {
-              name = '%' + parentName + '[' + optionIndex + ']';
-            } else {
-              name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-            }
           } else {
-            // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
-            if (subitemIndex === 1) {
-              name = parentName + '[' + optionIndex + ']';
+            // Multiple sequences: use option-based naming
+            if (isTopLevel) {
+              if (subitemIndex === 1) {
+                name = '%' + parentName + '[' + optionIndex + ']';
+              } else {
+                name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              }
             } else {
-              name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              if (subitemIndex === 1) {
+                name = parentName + '[' + optionIndex + ']';
+              } else {
+                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              }
             }
           }
 
@@ -359,28 +358,27 @@ namespace BNF {
             subitemIndex++;
             let name: string;
 
-            if (globalFragmentCounter) {
-              // Using global counter for single-sequence rules (both top-level and nested)
-              // Use itemPosition for nested fragments to reflect actual position
+            if (isSingleSequence) {
+              // Single sequence: use position-based naming
               if (isTopLevel) {
-                name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                name = '%' + parentName + '[' + itemPosition + ']';
               } else {
-                // For nested fragments, use itemPosition to number by actual sequence position
                 name = parentName + '[' + itemPosition + ']';
               }
-            } else if (isTopLevel) {
-              // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
-              if (subitemIndex === 1) {
-                name = '%' + parentName + '[' + optionIndex + ']';
-              } else {
-                name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-              }
             } else {
-              // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
-              if (subitemIndex === 1) {
-                name = parentName + '[' + optionIndex + ']';
+              // Multiple sequences: use option-based naming
+              if (isTopLevel) {
+                if (subitemIndex === 1) {
+                  name = '%' + parentName + '[' + optionIndex + ']';
+                } else {
+                  name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                }
               } else {
-                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                if (subitemIndex === 1) {
+                  name = parentName + '[' + optionIndex + ']';
+                } else {
+                  name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                }
               }
             }
 
@@ -428,11 +426,10 @@ namespace BNF {
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
 
-    // Use global counter for top-level fragments
-    const isTopLevel = !name.startsWith('%');
-    const globalFragmentCounter = isTopLevel ? {value: 1} : undefined;
+    // Determine if this rule has a single sequence (no alternatives)
+    const isSingleSequence = sequences.length === 1;
 
-    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes, globalFragmentCounter));
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes, isSingleSequence));
 
     let rule: IRule = {
       name,

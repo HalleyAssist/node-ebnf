@@ -191,10 +191,10 @@ var BNF;
     ];
     BNF.defaultParser = new Parser_1.Parser(BNF.RULES, { debug: false });
     function getAllTerms(expr) {
-        let terms = SemanticHelpers_1.findChildrenByType(expr, 'term').map(term => {
-            return SemanticHelpers_1.findChildrenByType(term, 'literal').concat(SemanticHelpers_1.findChildrenByType(term, 'rule-name'))[0].text;
+        let terms = (0, SemanticHelpers_1.findChildrenByType)(expr, 'term').map(term => {
+            return (0, SemanticHelpers_1.findChildrenByType)(term, 'literal').concat((0, SemanticHelpers_1.findChildrenByType)(term, 'rule-name'))[0].text;
         });
-        for (const exprItem of SemanticHelpers_1.findChildrenByType(expr, 'list')) {
+        for (const exprItem of (0, SemanticHelpers_1.findChildrenByType)(expr, 'list')) {
             terms = terms.concat(getAllTerms(exprItem));
         }
         return terms;
@@ -206,10 +206,10 @@ var BNF;
         if (ast.errors && ast.errors.length) {
             throw ast.errors[0];
         }
-        let rules = SemanticHelpers_1.findChildrenByType(ast, 'rule');
+        let rules = (0, SemanticHelpers_1.findChildrenByType)(ast, 'rule');
         let ret = rules.map((rule) => {
-            let name = SemanticHelpers_1.findChildrenByType(rule, 'rule-name')[0].text;
-            let expressions = SemanticHelpers_1.findChildrenByType(rule, 'firstExpression').concat(SemanticHelpers_1.findChildrenByType(rule, 'otherExpression'));
+            let name = (0, SemanticHelpers_1.findChildrenByType)(rule, 'rule-name')[0].text;
+            let expressions = (0, SemanticHelpers_1.findChildrenByType)(rule, 'firstExpression').concat((0, SemanticHelpers_1.findChildrenByType)(rule, 'otherExpression'));
             let bnf = [];
             for (const expr of expressions) {
                 bnf.push(getAllTerms(expr));
