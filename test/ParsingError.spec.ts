@@ -159,4 +159,34 @@ value ::= "true" | "false" | "null"
       expect(result.text).toBe('true');
     });
   });
+
+  describe("ParsingError with realistic grammar (JSON)", () => {
+    const grammar = `
+    json ::= value
+    value ::= object | array | string | number | "true" | "false" | "null"
+    object ::= "{" (pair ("," pair)*)? "}"
+    pair ::= string ":" value
+    array ::= "[" (value ("," value)*)? "]"
+    string ::= '"' [^"]* '"'
+    number ::= [0-9]+
+    WS ::= [ ]*
+    `;
+
+    const parser = new Parser(Grammars.W3C.getRules(grammar));
+
+    it('should provide detailed error info for malformed JSON', () => {
+      const input = '{"key": tru}';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toBeDefined();
+        expect(e.expected).toBe(['value']);
+
+        console.log(e)
+      }
+    });
+  });
 });
