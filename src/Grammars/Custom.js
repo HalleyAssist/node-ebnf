@@ -18,13 +18,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 // RULE_WHITESPACE	::=	RULE_S | Comment
 // RULE_S	::=	#x9 | #xA | #xD | #x20
 // Comment	::=	'/*' ( [^*] | '*'+ [^*/] )* '*'* '*/'
+const TokenError_1 = require("../TokenError");
 const Parser_1 = require("../Parser");
 var BNF;
 (function (BNF) {
     BNF.RULES = [
         {
             name: 'Grammar',
-            bnf: [['RULE_S*', '%Atomic*', 'EOF']]
+            bnf: [['RULE_S*', 'Attributes?', 'RULE_S*', '%Atomic*', 'EOF']]
         },
         {
             name: '%Atomic',
@@ -33,33 +34,58 @@ var BNF;
         },
         {
             name: 'Production',
-            bnf: [['NCName', 'RULE_S*', 'ProductionOperator', 'RULE_WHITESPACE*', 'Choice', 'RULE_WHITESPACE*', 'RULE_EOL+', 'RULE_S*']]
-        },
-        {
-            name: 'ProductionOperator',
-            bnf: [['"::="'], ['"||="']]
+            bnf: [
+                [
+                    'NCName',
+                    'RULE_S*',
+                    '"::="',
+                    'RULE_WHITESPACE*',
+                    '%Choice',
+                    'RULE_WHITESPACE*',
+                    'Attributes?',
+                    'RULE_EOL+',
+                    'RULE_S*'
+                ]
+            ]
         },
         {
             name: 'NCName',
             bnf: [[/[a-zA-Z][a-zA-Z_0-9]*/]]
         },
         {
-            name: 'Choice',
+            name: 'Attributes',
+            bnf: [['"{"', 'Attribute', '%Attributes*', 'RULE_S*', '"}"']]
+        },
+        {
+            name: '%Attributes',
+            bnf: [['RULE_S*', '","', 'Attribute']],
+            fragment: true
+        },
+        {
+            name: 'Attribute',
+            bnf: [['RULE_S*', 'NCName', 'RULE_WHITESPACE*', '"="', 'RULE_WHITESPACE*', 'AttributeValue']]
+        },
+        {
+            name: 'AttributeValue',
+            bnf: [['NCName'], [/[1-9][0-9]*/]]
+        },
+        {
+            name: '%Choice',
             bnf: [['SequenceOrDifference', '%_Choice_1*']],
             fragment: true
         },
         {
             name: '%_Choice_1',
-            bnf: [['RULE_WHITESPACE*', '"|"', 'RULE_WHITESPACE*', 'SequenceOrDifference']],
+            bnf: [['RULE_S*', '"|"', 'RULE_S*', 'SequenceOrDifference']],
             fragment: true
         },
         {
             name: 'SequenceOrDifference',
-            bnf: [['Item', 'RULE_WHITESPACE*', '%_Item_1?']]
+            bnf: [['%Item', 'RULE_WHITESPACE*', '%_Item_1?']]
         },
         {
             name: '%_Item_1',
-            bnf: [['Minus', 'Item'], ['Item*']],
+            bnf: [['Minus', '%Item'], ['%Item*']],
             fragment: true
         },
         {
@@ -67,8 +93,8 @@ var BNF;
             bnf: [['"-"']]
         },
         {
-            name: 'Item',
-            bnf: [['RULE_WHITESPACE*', '%Primary', 'PrimaryDecoration?']],
+            name: '%Item',
+            bnf: [['RULE_WHITESPACE*', 'PrimaryPreDecoration?', '%Primary', 'PrimaryDecoration?']],
             fragment: true
         },
         {
@@ -76,8 +102,8 @@ var BNF;
             bnf: [['"?"'], ['"*"'], ['"+"']]
         },
         {
-            name: 'DecorationName',
-            bnf: [['"ebnf://"', /[^\x5D#]+/]]
+            name: 'PrimaryPreDecoration',
+            bnf: [['"&"'], ['"!"'], ['"~"']]
         },
         {
             name: '%Primary',
@@ -86,12 +112,11 @@ var BNF;
         },
         {
             name: 'SubItem',
-            bnf: [['"("', 'RULE_WHITESPACE*', 'Choice', 'RULE_WHITESPACE*', '")"']]
+            bnf: [['"("', 'RULE_S*', '%Choice', 'RULE_S*', '")"']]
         },
         {
             name: 'StringLiteral',
-            bnf: [[`'"'`, /[^"]*/, `'"'`], [`"'"`, /[^']*/, `"'"`]],
-            pinned: 1
+            bnf: [[`'"'`, /[^"]*/, `'"'`], [`"'"`, /[^']*/, `"'"`]]
         },
         {
             name: 'CharCode',
@@ -137,7 +162,7 @@ var BNF;
         },
         {
             name: '%RULE_Comment_Body',
-            bnf: [['!"*/"', /[^*]/]],
+            bnf: [[/[^*]/], ['"*"+', /[^/]*/]],
             fragment: true
         },
         {
@@ -164,18 +189,18 @@ var BNF;
     const subExpressionRE = /^%/;
     function getBNFRule(name, parser) {
         if (typeof name == 'string') {
-            if (preDecorationRE.test(name))
-                return '';
+            let decoration = decorationRE.exec(name);
+            let preDecoration = preDecorationRE.exec(name);
+            let preDecorationText = preDecoration ? preDecoration[0] : '';
+            let decorationText = decoration ? decoration[0] + ' ' : '';
             let subexpression = subExpressionRE.test(name);
             if (subexpression) {
-                let decoration = decorationRE.exec(name);
-                let decorationText = decoration ? decoration[0] + ' ' : '';
                 let lonely = isLonelyRule(name, parser);
                 if (lonely)
-                    return getBNFBody(name, parser) + decorationText;
-                return '(' + getBNFBody(name, parser) + ')' + decorationText;
+                    return preDecorationText + getBNFBody(name, parser) + decorationText;
+                return preDecorationText + '(' + getBNFBody(name, parser) + ')' + decorationText;
             }
-            return name;
+            return name.replace(preDecorationRE, preDecorationText);
         }
         else {
             return name.source
@@ -204,7 +229,7 @@ var BNF;
         let acumulator = [];
         for (const l of parser.grammarRules) {
             if (!/^%/.test(l.name)) {
-                let recover = l.recover ? ' /* { recoverUntil=' + l.recover + ' } */' : '';
+                let recover = l.recover ? ' { recoverUntil=' + l.recover + ' }' : '';
                 acumulator.push(l.name + ' ::= ' + getBNFBody(l.name, parser) + recover);
             }
         }
@@ -215,15 +240,14 @@ var BNF;
         console.log('reberia restar ' + resta + ' a ' + total);
         throw new Error('Difference not supported yet');
     }
-    function convertRegex(txt, caseInsensitive = false) {
-        const pattern = txt
+    function convertRegex(txt) {
+        return new RegExp(txt
             .replace(/#x([a-zA-Z0-9]{4})/g, '\\u$1')
             .replace(/#x([a-zA-Z0-9]{3})/g, '\\u0$1')
             .replace(/#x([a-zA-Z0-9]{2})/g, '\\x$1')
-            .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
-        return new RegExp(pattern, caseInsensitive ? 'i' : '');
+            .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1'));
     }
-    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, parentAttributes) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
@@ -236,30 +260,35 @@ var BNF;
             let decoration = children[i + 1];
             decoration = (decoration && decoration.type == 'PrimaryDecoration' && decoration.text) || '';
             let preDecoration = '';
+            if (anterior && anterior.type == 'PrimaryPreDecoration') {
+                preDecoration = anterior.text;
+            }
+            let pinned = preDecoration == '~' ? 1 : undefined;
+            if (pinned) {
+                preDecoration = '';
+            }
             switch (x.type) {
                 case 'SubItem':
                     let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
-                    createRule(tmpRules, x, name, caseInsensitive);
+                    createRule(tmpRules, x, name, parentAttributes);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
                 case 'NCName':
                     bnfSeq.push(preDecoration + x.text + decoration);
                     break;
                 case 'StringLiteral':
-                    if (caseInsensitive) {
-                        // For case insensitive string literals, convert each character to a case-insensitive regex
-                        const literalText = x.text.slice(1, -1); // Remove quotes
-                        for (const c of literalText) {
-                            if (/[a-zA-Z]/.test(c)) {
-                                bnfSeq.push(new RegExp('[' + c.toUpperCase() + c.toLowerCase() + ']'));
+                    if (decoration || preDecoration || !/^['"/()a-zA-Z0-9&_.:=,+*\-\^\\]+$/.test(x.text)) {
+                        bnfSeq.push(preDecoration + x.text + decoration);
+                    }
+                    else {
+                        for (const c of x.text.slice(1, -1)) {
+                            if (parentAttributes && parentAttributes["ignoreCase"] == "true" && /[a-zA-Z]/.test(c)) {
+                                bnfSeq.push(new RegExp("[" + c.toUpperCase() + c.toLowerCase() + "]"));
                             }
                             else {
                                 bnfSeq.push(new RegExp(Parser_1.escapeRegExp(c)));
                             }
                         }
-                    }
-                    else {
-                        bnfSeq.push(preDecoration + x.text + decoration);
                     }
                     break;
                 case 'CharCode':
@@ -267,15 +296,17 @@ var BNF;
                     if (decoration || preDecoration) {
                         let newRule = {
                             name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
-                            bnf: [[convertRegex(x.text, caseInsensitive)]]
+                            bnf: [[convertRegex(x.text)]],
+                            pinned
                         };
                         tmpRules.push(newRule);
                         bnfSeq.push(preDecoration + newRule.name + decoration);
                     }
                     else {
-                        bnfSeq.push(convertRegex(x.text, caseInsensitive));
+                        bnfSeq.push(convertRegex(x.text));
                     }
                     break;
+                case 'PrimaryPreDecoration':
                 case 'PrimaryDecoration':
                     break;
                 default:
@@ -285,25 +316,49 @@ var BNF;
         }
         return bnfSeq;
     }
-    function createRule(tmpRules, token, name, caseInsensitive = false) {
-        // Check if this production uses the case insensitive operator ||=
-        const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
-        const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
+    function createRule(tmpRules, token, name, parentAttributes = undefined) {
+        let attrNode = token.children.filter(x => x.type == 'Attributes')[0];
+        let attributes = {};
+        if (attrNode) {
+            for (const x of attrNode.children) {
+                let attrName = x.children.filter(x => x.type == 'NCName')[0].text;
+                if (attrName in attributes) {
+                    throw new TokenError_1.TokenError('Duplicated attribute ' + attrName, x);
+                }
+                else {
+                    attributes[attrName] = x.children.filter(x => x.type == 'AttributeValue')[0].text;
+                }
+            }
+        }
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
         let rule = {
             name,
             bnf
         };
-        let recover = null;
-        for (const x of bnf) {
-            recover = recover || x['recover'];
-            delete x['recover'];
-        }
         if (name.indexOf('%') == 0)
             rule.fragment = true;
-        if (recover)
-            rule.recover = recover;
+        if (attributes['recoverUntil']) {
+            rule.recover = attributes['recoverUntil'];
+            if (rule.bnf.length > 1)
+                throw new TokenError_1.TokenError('only one-option productions are suitable for error recovering', token);
+        }
+        if ('pin' in attributes) {
+            let num = parseInt(attributes['pin']);
+            if (!isNaN(num)) {
+                rule.pinned = num;
+            }
+            if (rule.bnf.length > 1)
+                throw new TokenError_1.TokenError('only one-option productions are suitable for pinning', token);
+        }
+        if ('ws' in attributes) {
+            rule.implicitWs = attributes['ws'] != 'explicit';
+        }
+        else {
+            rule.implicitWs = null;
+        }
+        rule.fragment = rule.fragment || attributes['fragment'] == 'true';
+        rule.simplifyWhenOneChildren = attributes['simplifyWhenOneChildren'] == 'true';
         tmpRules.push(rule);
     }
     function getRules(source, parser = BNF.defaultParser) {
@@ -313,11 +368,30 @@ var BNF;
         if (ast.errors && ast.errors.length) {
             throw ast.errors[0];
         }
+        let implicitWs = null;
+        let attrNode = ast.children.filter(x => x.type == 'Attributes')[0];
+        let attributes = {};
+        if (attrNode) {
+            for (const x of attrNode.children) {
+                let attrName = x.children.filter(x => x.type == 'NCName')[0].text;
+                if (attrName in attributes) {
+                    throw new TokenError_1.TokenError('Duplicated attribute ' + attrName, x);
+                }
+                else {
+                    attributes[attrName] = x.children.filter(x => x.type == 'AttributeValue')[0].text;
+                }
+            }
+        }
+        implicitWs = attributes['ws'] == 'implicit';
         let tmpRules = [];
         ast.children.filter(x => x.type == 'Production').map((x) => {
             let name = x.children.filter(x => x.type == 'NCName')[0].text;
             createRule(tmpRules, x, name);
         });
+        for (const rule of tmpRules) {
+            if (rule.implicitWs === null)
+                rule.implicitWs = implicitWs;
+        }
         return tmpRules;
     }
     BNF.getRules = getRules;
@@ -337,4 +411,3 @@ var BNF;
     BNF.Parser = Parser;
 })(BNF || (BNF = {}));
 exports.default = BNF;
-//# sourceMappingURL=W3CEBNF.js.map

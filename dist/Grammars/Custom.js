@@ -236,7 +236,6 @@ var BNF;
         return acumulator.join('\n');
     }
     BNF.emit = emit;
-    let subitems = 0;
     function restar(total, resta) {
         console.log('reberia restar ' + resta + ' a ' + total);
         throw new Error('Difference not supported yet');
@@ -248,10 +247,11 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{2})/g, '\\x$1')
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1'));
     }
-    function getSubItems(tmpRules, seq, parentName, parentAttributes) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, parentAttributes) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
+        let subitemIndex = 0; // Track subitems within this sequence
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -269,7 +269,7 @@ var BNF;
             }
             switch (x.type) {
                 case 'SubItem':
-                    let name = '%' + (parentName + subitems++);
+                    let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
                     createRule(tmpRules, x, name, parentAttributes);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
@@ -295,7 +295,7 @@ var BNF;
                 case 'CharClass':
                     if (decoration || preDecoration) {
                         let newRule = {
-                            name: '%' + (parentName + subitems++),
+                            name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
                             bnf: [[convertRegex(x.text)]],
                             pinned
                         };
@@ -330,7 +330,8 @@ var BNF;
                 }
             }
         }
-        let bnf = token.children.filter(x => x.type == 'SequenceOrDifference').map(s => getSubItems(tmpRules, s, name, parentAttributes ? parentAttributes : attributes));
+        let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
         let rule = {
             name,
             bnf

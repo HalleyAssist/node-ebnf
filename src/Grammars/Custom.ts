@@ -254,8 +254,6 @@ namespace BNF {
     return acumulator.join('\n');
   }
 
-  let subitems = 0;
-
   function restar(total, resta) {
     console.log('reberia restar ' + resta + ' a ' + total);
     throw new Error('Difference not supported yet');
@@ -271,10 +269,11 @@ namespace BNF {
     );
   }
 
-  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, parentAttributes: any) {
+  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
+    let subitemIndex = 0; // Track subitems within this sequence
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -299,7 +298,7 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          let name = '%' + (parentName + subitems++);
+          let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
 
           createRule(tmpRules, x, name, parentAttributes);
 
@@ -326,7 +325,7 @@ namespace BNF {
         case 'CharClass':
           if (decoration || preDecoration) {
             let newRule: IRule = {
-              name: '%' + (parentName + subitems++),
+              name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
               bnf: [[convertRegex(x.text)]],
               pinned
             };
@@ -367,7 +366,8 @@ namespace BNF {
       }
     }
 
-    let bnf = token.children.filter(x => x.type == 'SequenceOrDifference').map(s => getSubItems(tmpRules, s, name, parentAttributes ? parentAttributes : attributes));
+    let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
 
     let rule: IRule = {
       name,

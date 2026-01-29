@@ -337,4 +337,3 @@ var BNF;
     BNF.Parser = Parser;
 })(BNF || (BNF = {}));
 exports.default = BNF;
-//# sourceMappingURL=W3CEBNF.js.map
