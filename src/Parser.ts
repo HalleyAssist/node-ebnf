@@ -6,6 +6,7 @@ const preDecorationRE = /^(@|&|!)/;
 const WS_RULE = 'WS';
 
 import { TokenError } from './TokenError';
+import { ParsingError, IParsingErrorPosition } from './ParsingError';
 
 export type RulePrimary = string | RegExp;
 
@@ -147,10 +148,18 @@ export interface IParserOptions {
   debug: boolean;
 }
 
+interface IFailureInfo {
+  offset: number;
+  expected: Set<string>;
+  found: string;
+}
+
 const ignoreMissingRules = ['EOF'];
 
 export class Parser {
   private readonly debug;
+  private furthestFailure: IFailureInfo | null = null;
+  private originalInput: string = '';
 
   cachedRules: IDictionary<IRule> = {};
   constructor(public grammarRules: IRule[], public options?: Partial<IParserOptions>) {
@@ -223,7 +232,11 @@ export class Parser {
       target = this.grammarRules.filter(x => !x.fragment && x.name.indexOf('%') != 0)[0].name;
     }
 
-    let result = this.parse(txt, target);
+    // Reset failure tracking for each new parse
+    this.furthestFailure = null;
+    this.originalInput = txt;
+
+    let result = this.parse(txt, target, 0, 0);
 
     if (result) {
       agregateErrors(result.errors, result);
@@ -243,6 +256,27 @@ export class Parser {
       fixRest(result);
 
       result.rest = rest;
+    } else {
+      // Parsing failed completely - throw ParsingError
+      if (this.furthestFailure) {
+        const position = this.calculatePosition(this.originalInput, this.furthestFailure.offset);
+        const expected = Array.from(this.furthestFailure.expected);
+        const found = this.furthestFailure.found;
+        throw new ParsingError(
+          'Failed to parse input',
+          position,
+          expected,
+          found
+        );
+      } else {
+        // Fallback if no failure was tracked
+        throw new ParsingError(
+          'Failed to parse input',
+          { offset: 0, line: 1, column: 1 },
+          [target],
+          txt.length > 0 ? txt.charAt(0) : 'end of input'
+        );
+      }
     }
 
     return result;
@@ -252,7 +286,44 @@ export class Parser {
     return 'CANNOT EMIT SOURCE FROM BASE Parser';
   }
 
-  parse(txt: string, target: string, recursion = 0): IToken {
+  private calculatePosition(txt: string, offset: number): IParsingErrorPosition {
+    let line = 1;
+    let column = 1;
+    for (let i = 0; i < offset && i < txt.length; i++) {
+      // Handle \r\n as a single line ending
+      if (txt[i] === '\r' && i + 1 < txt.length && txt[i + 1] === '\n') {
+        line++;
+        column = 1;
+        i++; // Skip the \n
+      } else if (txt[i] === '\n' || txt[i] === '\r') {
+        line++;
+        column = 1;
+      } else {
+        column++;
+      }
+    }
+    return { offset, line, column };
+  }
+
+  private recordFailure(offset: number, expected: string) {
+    if (!this.furthestFailure || offset > this.furthestFailure.offset) {
+      // This is a new furthest failure
+      const found = offset < this.originalInput.length 
+        ? this.originalInput.charAt(offset)
+        : 'end of input';
+      
+      this.furthestFailure = {
+        offset,
+        expected: new Set([expected]),
+        found
+      };
+    } else if (offset === this.furthestFailure.offset) {
+      // Same position, add to expected set
+      this.furthestFailure.expected.add(expected);
+    }
+  }
+
+  parse(txt: string, target: string, recursion = 0, offset = 0): IToken {
     let out: IToken = null;
 
     let type = parseRuleName(target);
@@ -272,6 +343,7 @@ export class Parser {
 
     if (type.name == 'EOF') {
       if (txt.length) {
+        this.recordFailure(offset, 'EOF');
         return null;
       } else if (txt.length == 0) {
         return {
@@ -321,6 +393,7 @@ export class Parser {
       if (e instanceof ReferenceError) {
         console.error(e);
       }
+      this.recordFailure(offset, target);
       return null;
     }
 
@@ -330,6 +403,9 @@ export class Parser {
       if (result) {
         result.type = realType;
         return result;
+      } else {
+        // Literal or regex match failed
+        this.recordFailure(offset, type.isLiteral ? type.name : target);
       }
     } else {
       let options = targetLex.bnf;
@@ -374,13 +450,13 @@ export class Parser {
                 got = null;
 
                 if (targetLex.implicitWs) {
-                  got = this.parse(tmpTxt, localTarget.name, recursion + 1);
+                  got = this.parse(tmpTxt, localTarget.name, recursion + 1, offset + position);
 
                   if (!got) {
                     let WS: IToken;
 
                     do {
-                      WS = this.parse(tmpTxt, WS_RULE, recursion + 1);
+                      WS = this.parse(tmpTxt, WS_RULE, recursion + 1, offset + position);
 
                       if (WS) {
                         tmp.text = tmp.text + WS.text;
@@ -398,7 +474,7 @@ export class Parser {
                   }
                 }
 
-                got = got || this.parse(tmpTxt, localTarget.name, recursion + 1);
+                got = got || this.parse(tmpTxt, localTarget.name, recursion + 1, offset + position);
 
                 // rule ::= "true" ![a-zA-Z]
                 // negative lookup, if it does not match, we should continue
@@ -414,6 +490,8 @@ export class Parser {
                 if (!got) {
                   if (localTarget.isOptional) break;
                   if (localTarget.atLeastOne && foundAtLeastOne) break;
+                  // Record this failure for error reporting
+                  this.recordFailure(offset + position, localTarget.name);
                 }
 
                 if (got && targetLex.pinned == i + 1) {
@@ -421,7 +499,7 @@ export class Parser {
                   printable && console.log(new Array(recursion + 1).join('│  ') + '└─ ' + got.type + ' PINNED');
                 }
 
-                if (!got) got = this.parseRecovery(targetLex, tmpTxt, recursion + 1);
+                if (!got) got = this.parseRecovery(targetLex, tmpTxt, recursion + 1, offset + position);
 
                 if (!got) {
                   if (pinned) {
@@ -497,6 +575,7 @@ export class Parser {
               let got = readToken(tmpTxt, phases[i] as RegExp);
 
               if (!got) {
+                this.recordFailure(offset + position, (phases[i] as RegExp).source);
                 continue optionsLoop;
               }
 
@@ -543,7 +622,7 @@ export class Parser {
     return out;
   }
 
-  private parseRecovery(recoverableToken: IRule, tmpTxt: string, recursion: number): IToken {
+  private parseRecovery(recoverableToken: IRule, tmpTxt: string, recursion: number, offset: number): IToken {
     if (recoverableToken.recover && tmpTxt.length) {
       let printable = this.debug;
 
@@ -569,9 +648,10 @@ export class Parser {
       };
 
       let got: IToken;
+      let currentOffset = offset;
 
       do {
-        got = this.parse(tmpTxt, recoverableToken.recover, recursion + 1);
+        got = this.parse(tmpTxt, recoverableToken.recover, recursion + 1, currentOffset);
 
         if (got) {
           new TokenError('Unexpected input: "' + tmp.text + `" Expecting: ${recoverableToken.name}`, tmp);
@@ -580,6 +660,7 @@ export class Parser {
           tmp.text = tmp.text + tmpTxt[0];
           tmp.end = tmp.text.length;
           tmpTxt = tmpTxt.substr(1);
+          currentOffset++;
         }
       } while (!got && tmpTxt.length > 0);
 

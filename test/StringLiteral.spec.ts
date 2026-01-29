@@ -50,7 +50,7 @@ describe('String Literals', () => {
     testParseTokenFailsafe(parser, 'Or');
 
     it('string literal case sensitive rule - OR', () => {
-       expect(parser.getAST('OR')).toEqual(null);
+       expect(() => parser.getAST('OR')).toThrow();
     });
 
     it('string literal case insensitive rule', () => {

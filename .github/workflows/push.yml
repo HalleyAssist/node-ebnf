@@ -1,5 +1,5 @@
 on:
-  push
+  push:
 
 name: Test and release
 jobs:
@@ -24,9 +24,3 @@ jobs:
         run: npm run coverage
       - name: lint
         run: npm run lint
-      - name: Publish
-        uses: menduz/oddish-action@master
-        with:
-          provenance: true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
