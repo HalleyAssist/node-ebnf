@@ -237,9 +237,30 @@ class Parser {
         const expectedKey = expected instanceof RegExp ? expected.source : expected;
         if (!this.furthestFailure || offset > this.furthestFailure.offset) {
             // This is a new furthest failure
-            const found = offset < this.originalInput.length
-                ? this.originalInput.charAt(offset)
-                : 'end of input';
+            let found;
+            if (offset >= this.originalInput.length) {
+                found = 'end of input';
+            }
+            else {
+                // Extract a meaningful token/substring from the failure position
+                const remaining = this.originalInput.substring(offset);
+                // Skip whitespace using replace
+                const trimmed = remaining.replace(/^\s+/, '');
+                if (trimmed.length === 0) {
+                    found = 'end of input';
+                }
+                else {
+                    // Try to extract a word/token (alphanumeric + some symbols)
+                    const match = trimmed.match(/^[^\s\}\]\),;]+/);
+                    if (match && match[0].length > 0) {
+                        found = match[0];
+                    }
+                    else {
+                        // Fallback to first character after whitespace
+                        found = trimmed.charAt(0);
+                    }
+                }
+            }
             this.furthestFailure = {
                 offset,
                 expected: new Set([expectedKey]),

@@ -28,6 +28,7 @@ value ::= "true" | "false" | "null"
         expect(e.position.offset).toBe(0);
         expect(e.position.line).toBe(1);
         expect(e.position.column).toBe(1);
+        expect(e.found).toBe('invalid');
       }
     });
 
@@ -42,6 +43,8 @@ value ::= "true" | "false" | "null"
         expect(e.expected.length).toBeGreaterThan(0);
         // Should expect the parent rule
         expect(e.expected).toEqual(['value']);
+        // The found property should contain the actual text
+        expect(e.found).toBe('invalid');
         // The failure tree should contain the alternatives
         expect(e.failureTree).toBeDefined();
         expect(e.failureTree.length).toBeGreaterThan(0);
@@ -55,7 +58,8 @@ value ::= "true" | "false" | "null"
       } catch (e) {
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.found).toBeDefined();
-        expect(e.found).toBe('i');
+        // Should capture the full token, not just a single character
+        expect(e.found).toBe('invalid');
       }
     });
 
@@ -188,6 +192,9 @@ value ::= "true" | "false" | "null"
         expect(e.expected).toBeDefined();
         expect(e.expected).toEqual(['value']);
         
+        // Verify the found property shows the actual text that failed
+        expect(e.found).toBe('tru');
+        
         // Verify the failureTree structure
         expect(e.failureTree).toBeDefined();
         expect(e.failureTree.length).toBe(1);
@@ -228,6 +235,7 @@ value ::= "true" | "false" | "null"
         expect(e.position).toBeDefined();
         expect(e.position.offset).toBeGreaterThan(0);
         expect(e.expected).toBeDefined();
+        expect(e.found).toBeDefined();
         expect(e.failureTree).toBeDefined();
       }
     });
@@ -241,6 +249,7 @@ value ::= "true" | "false" | "null"
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.position).toBeDefined();
         expect(e.expected).toEqual(['value']);
+        expect(e.found).toBeDefined();
         expect(e.failureTree).toBeDefined();
         // Verify the failure tree contains the alternatives that were tried
         expect(e.failureTree.length).toBeGreaterThan(0);
@@ -256,6 +265,7 @@ value ::= "true" | "false" | "null"
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.position).toBeDefined();
         expect(e.expected).toBeDefined();
+        expect(e.found).toBeDefined();
         expect(e.failureTree).toBeDefined();
       }
     });
@@ -269,6 +279,7 @@ value ::= "true" | "false" | "null"
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.position).toBeDefined();
         expect(e.expected).toBeDefined();
+        expect(e.found).toBeDefined();
         expect(e.failureTree).toBeDefined();
       }
     });
@@ -283,6 +294,7 @@ value ::= "true" | "false" | "null"
         expect(e.position).toBeDefined();
         expect(e.position.offset).toBeGreaterThan(0);
         expect(e.expected).toEqual(['value']);
+        expect(e.found).toBeDefined();
         expect(e.failureTree).toBeDefined();
       }
     });
@@ -295,6 +307,7 @@ value ::= "true" | "false" | "null"
       } catch (e) {
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.position).toBeDefined();
+        expect(e.found).toBeDefined();
         expect(e.failureTree).toBeDefined();
         // Verify the failure tree structure exists
         expect(Array.isArray(e.failureTree)).toBe(true);
