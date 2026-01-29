@@ -250,6 +250,9 @@ namespace BNF {
       subitemCounter = {value: 0};
     }
 
+    // Count total SubItems in this sequence
+    const totalSubItems = children.filter(c => c.type === 'SubItem').length;
+
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
 
@@ -280,11 +283,29 @@ namespace BNF {
             topLevelOptionIndex = optionIndex;
           }
 
-          if (subitemCounter.value === 1 && !parentName.startsWith('%')) {
-            // First SubItem at top level: ALWAYS use single index
+          // Check if this SubItem contains choices (multiple sequences)
+          const innerSequences = x.children.filter(c => c.type === 'SequenceOrDifference');
+          const hasChoices = innerSequences.length > 1;
+          
+          // Check if this SubItem contains nested SubItems
+          const hasNestedSubItems = innerSequences.some(seq => 
+            seq.children.some(child => child.type === 'SubItem')
+          );
+          
+          // Use single index only if:
+          // 1. It's the first (and only) SubItem in its parent sequence
+          // 2. AND (it contains choices OR it contains nested SubItems)
+          // 3. AND it's at top level (not nested)
+          const useSingleIndex = subitemCounter.value === 1 && 
+                                 !parentName.startsWith('%') && 
+                                 totalSubItems === 1 && 
+                                 (hasChoices || hasNestedSubItems);
+
+          if (useSingleIndex) {
+            // First SubItem at top level with choices or nested SubItems: use single index
             name = '%' + parentName + '[' + topLevelOptionIndex + ']';
           } else {
-            // Nested or subsequent SubItem: use double index
+            // All other cases: use double index
             let baseName = parentName.startsWith('%') ? parentName.substring(1).split('[')[0] : parentName;
             name = '%' + baseName + '[' + topLevelOptionIndex + '][' + subitemCounter.value + ']';
           }
@@ -357,6 +378,32 @@ namespace BNF {
     const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
+    
+    // Check if this is a transparent SubItem:
+    // All sequences contain exactly one SubItem and nothing else
+    const isTransparent = name.startsWith('%') && sequences.length > 1 && sequences.every(seq => {
+      const relevantChildren = seq.children.filter(c => 
+        c.type !== 'PrimaryDecoration' && 
+        c.type !== 'Minus' && 
+        c.type !== 'PrimaryPreDecoration'
+      );
+      return relevantChildren.length === 1 && relevantChildren[0].type === 'SubItem';
+    });
+    
+    if (isTransparent) {
+      // Don't create a fragment for this SubItem
+      // Instead, create fragments for the inner SubItems with single-index naming
+      const baseName = name.substring(1).split('[')[0];
+      sequences.forEach((seq, idx) => {
+        const innerSubItem = seq.children.find(c => c.type === 'SubItem');
+        if (innerSubItem) {
+          const innerName = '%' + baseName + '[' + (idx + 1) + ']';
+          createRule(tmpRules, innerSubItem, innerName, isCaseInsensitive);
+        }
+      });
+      return; // Don't create the outer fragment
+    }
+    
     let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, subitemCounter));
 
     let rule: IRule = {
