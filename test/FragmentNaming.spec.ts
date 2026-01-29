@@ -145,10 +145,10 @@ describe('Fragment naming', () => {
       }
     });
   });
-
+  
   it('should handle nesting correctly', () => {
     const grammar = `
-      Rule ::= ("a" | "b") | ("c" | "d")
+      Rule ||= ("a" "b") | ("c" ("d" | "e"))
     `;
 
     const parser = new Grammars.W3C.Parser(grammar);
