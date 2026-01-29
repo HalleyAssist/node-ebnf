@@ -4,7 +4,8 @@ export interface IParsingErrorPosition {
     column: number;
 }
 export interface IFailureTreeNode {
-    rule: string;
+    name: string;
+    expected?: string;
     children?: IFailureTreeNode[];
 }
 export declare class ParsingError extends Error {

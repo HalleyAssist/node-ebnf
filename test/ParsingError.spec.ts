@@ -187,6 +187,33 @@ value ::= "true" | "false" | "null"
         expect(e.position).toBeDefined();
         expect(e.expected).toBeDefined();
         expect(e.expected).toEqual(['value']);
+        
+        // Verify the failureTree structure
+        expect(e.failureTree).toBeDefined();
+        expect(e.failureTree.length).toBeGreaterThan(0);
+        
+        // Find the 'value' node in the tree
+        const pairNode = e.failureTree.find(node => node.name === 'pair');
+        expect(pairNode).toBeDefined();
+        expect(pairNode.children).toBeDefined();
+        
+        const valueNode = pairNode.children.find(node => node.name === 'value');
+        expect(valueNode).toBeDefined();
+        expect(valueNode.children).toBeDefined();
+        expect(valueNode.children.length).toBeGreaterThan(0);
+        
+        // Verify that alternatives have the expected structure
+        const objectNode = valueNode.children.find(node => node.name === 'object');
+        expect(objectNode).toBeDefined();
+        expect(objectNode.expected).toBe('"{"');
+        
+        const arrayNode = valueNode.children.find(node => node.name === 'array');
+        expect(arrayNode).toBeDefined();
+        expect(arrayNode.expected).toBe('"["');
+        
+        const trueNode = valueNode.children.find(node => node.name === '"true"');
+        expect(trueNode).toBeDefined();
+        expect(trueNode.expected).toBe('"true"');
       }
     });
 
@@ -272,8 +299,8 @@ value ::= "true" | "false" | "null"
         expect(Array.isArray(e.failureTree)).toBe(true);
         // The tree should contain information about what was expected
         expect(e.failureTree.length).toBeGreaterThan(0);
-        const hasRuleProperty = e.failureTree.every(node => node.hasOwnProperty('rule'));
-        expect(hasRuleProperty).toBe(true);
+        const hasNameProperty = e.failureTree.every(node => node.hasOwnProperty('name'));
+        expect(hasNameProperty).toBe(true);
       }
     });
   });

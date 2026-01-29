@@ -5,7 +5,8 @@ export interface IParsingErrorPosition {
 }
 
 export interface IFailureTreeNode {
-  rule: string;
+  name: string;
+  expected?: string;
   children?: IFailureTreeNode[];
 }
 

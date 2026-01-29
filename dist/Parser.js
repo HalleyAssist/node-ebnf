@@ -1,7 +1,11 @@
 "use strict";
 // https://www.ics.uci.edu/~pattis/ICS-33/lectures/ebnf.pdf
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Parser = exports.findRuleByName = exports.parseRuleName = exports.escapeRegExp = exports.readToken = void 0;
+exports.Parser = void 0;
+exports.readToken = readToken;
+exports.escapeRegExp = escapeRegExp;
+exports.parseRuleName = parseRuleName;
+exports.findRuleByName = findRuleByName;
 const UPPER_SNAKE_RE = /^[A-Z0-9_]+$/;
 const decorationRE = /(\?|\+|\*)$/;
 const preDecorationRE = /^(@|&|!)/;
@@ -27,11 +31,9 @@ function readToken(txt, expr) {
     }
     return null;
 }
-exports.readToken = readToken;
 function escapeRegExp(str) {
     return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
 }
-exports.escapeRegExp = escapeRegExp;
 function fixRest(token) {
     token.rest = '';
     if (token.children) {
@@ -82,12 +84,10 @@ function parseRuleName(name) {
     out.lookup = out.lookupNegative || out.lookupPositive;
     return out;
 }
-exports.parseRuleName = parseRuleName;
 function findRuleByName(name, parser) {
     let parsed = parseRuleName(name);
     return parser.cachedRules[parsed.name] || null;
 }
-exports.findRuleByName = findRuleByName;
 /// Removes all the nodes starting with 'RULE_'
 function stripRules(token, re) {
     if (token.children) {
@@ -319,13 +319,35 @@ class Parser {
         return Array.from(new Set([...allParents, ...allChildren]));
     }
     buildFailureTree(tree) {
+        const isLiteralOrTerminal = (ruleName) => {
+            // Check if it's a literal (starts with " or ')
+            if (ruleName.startsWith('"') || ruleName.startsWith("'")) {
+                return true;
+            }
+            // Check if it's a regex pattern (contains [, ], -, #x, etc.)
+            if (ruleName.includes('[') || ruleName.includes('#x')) {
+                return true;
+            }
+            return false;
+        };
         const buildNode = (ruleName) => {
-            const node = { rule: ruleName };
+            const node = { name: ruleName };
             if (tree.has(ruleName)) {
                 const children = Array.from(tree.get(ruleName));
                 if (children.length > 0) {
-                    node.children = children.map(child => buildNode(child));
+                    // If this rule has exactly one child and that child is a terminal,
+                    // set expected to that terminal instead of creating children
+                    if (children.length === 1 && isLiteralOrTerminal(children[0])) {
+                        node.expected = children[0];
+                    }
+                    else {
+                        node.children = children.map(child => buildNode(child));
+                    }
                 }
+            }
+            else if (isLiteralOrTerminal(ruleName)) {
+                // If this is a terminal/literal with no children, set expected to itself
+                node.expected = ruleName;
             }
             return node;
         };

@@ -411,14 +411,37 @@ export class Parser {
   }
 
   private buildFailureTree(tree: Map<string, Set<string>>): IFailureTreeNode[] {
+    const isLiteralOrTerminal = (ruleName: string): boolean => {
+      // Check if it's a literal (starts with " or ')
+      if (ruleName.startsWith('"') || ruleName.startsWith("'")) {
+        return true;
+      }
+      // Check if it's a regex pattern (contains [, ], -, #x, etc.)
+      if (ruleName.includes('[') || ruleName.includes('#x')) {
+        return true;
+      }
+      return false;
+    };
+
     const buildNode = (ruleName: string): IFailureTreeNode => {
-      const node: IFailureTreeNode = { rule: ruleName };
+      const node: IFailureTreeNode = { name: ruleName };
+      
       if (tree.has(ruleName)) {
         const children = Array.from(tree.get(ruleName)!);
         if (children.length > 0) {
-          node.children = children.map(child => buildNode(child));
+          // If this rule has exactly one child and that child is a terminal,
+          // set expected to that terminal instead of creating children
+          if (children.length === 1 && isLiteralOrTerminal(children[0])) {
+            node.expected = children[0];
+          } else {
+            node.children = children.map(child => buildNode(child));
+          }
         }
+      } else if (isLiteralOrTerminal(ruleName)) {
+        // If this is a terminal/literal with no children, set expected to itself
+        node.expected = ruleName;
       }
+      
       return node;
     };
     
