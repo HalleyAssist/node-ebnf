@@ -269,10 +269,11 @@ namespace BNF {
     );
   }
 
-  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, fragmentCounter: { value: number }, parentAttributes: any) {
+  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
+    let subitemIndex = 0; // Track subitems within this sequence
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -297,7 +298,9 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          let name = '%' + parentName + '[' + (++fragmentCounter.value) + ']';
+          // Avoid double % prefix for nested fragments
+          let prefix = parentName.startsWith('%') ? '' : '%';
+          let name = prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
 
           createRule(tmpRules, x, name, parentAttributes);
 
@@ -323,8 +326,10 @@ namespace BNF {
         case 'CharCode':
         case 'CharClass':
           if (decoration || preDecoration) {
+            // Avoid double % prefix for nested fragments
+            let prefix = parentName.startsWith('%') ? '' : '%';
             let newRule: IRule = {
-              name: '%' + parentName + '[' + (++fragmentCounter.value) + ']',
+              name: prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
               bnf: [[convertRegex(x.text)]],
               pinned
             };
@@ -366,9 +371,7 @@ namespace BNF {
     }
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-    // Use a shared counter across all options for simpler naming
-    let fragmentCounter = { value: 0 };
-    let bnf = sequences.map((s) => getSubItems(tmpRules, s, name, fragmentCounter, parentAttributes ? parentAttributes : attributes));
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
 
     let rule: IRule = {
       name,

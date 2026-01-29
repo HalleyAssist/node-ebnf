@@ -223,10 +223,11 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
         return new RegExp(pattern, caseInsensitive ? 'i' : '');
     }
-    function getSubItems(tmpRules, seq, parentName, fragmentCounter, caseInsensitive = false) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
+        let subitemIndex = 0; // Track subitems within this sequence
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -237,7 +238,9 @@ var BNF;
             let preDecoration = '';
             switch (x.type) {
                 case 'SubItem':
-                    let name = '%' + parentName + '[' + (++fragmentCounter.value) + ']';
+                    // Avoid double % prefix for nested fragments
+                    let prefix = parentName.startsWith('%') ? '' : '%';
+                    let name = prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
                     createRule(tmpRules, x, name, caseInsensitive);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
@@ -264,8 +267,10 @@ var BNF;
                 case 'CharCode':
                 case 'CharClass':
                     if (decoration || preDecoration) {
+                        // Avoid double % prefix for nested fragments
+                        let prefix = parentName.startsWith('%') ? '' : '%';
                         let newRule = {
-                            name: '%' + parentName + '[' + (++fragmentCounter.value) + ']',
+                            name: prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
                             bnf: [[convertRegex(x.text, caseInsensitive)]]
                         };
                         tmpRules.push(newRule);
@@ -289,9 +294,7 @@ var BNF;
         const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
         const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        // Use a shared counter across all options for simpler naming
-        let fragmentCounter = { value: 0 };
-        let bnf = sequences.map((s) => getSubItems(tmpRules, s, name, fragmentCounter, isCaseInsensitive));
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
         let rule = {
             name,
             bnf

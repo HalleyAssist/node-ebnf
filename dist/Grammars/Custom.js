@@ -247,10 +247,11 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{2})/g, '\\x$1')
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1'));
     }
-    function getSubItems(tmpRules, seq, parentName, fragmentCounter, parentAttributes) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, parentAttributes) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
+        let subitemIndex = 0; // Track subitems within this sequence
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -268,7 +269,9 @@ var BNF;
             }
             switch (x.type) {
                 case 'SubItem':
-                    let name = '%' + parentName + '[' + (++fragmentCounter.value) + ']';
+                    // Avoid double % prefix for nested fragments
+                    let prefix = parentName.startsWith('%') ? '' : '%';
+                    let name = prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
                     createRule(tmpRules, x, name, parentAttributes);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
@@ -293,8 +296,10 @@ var BNF;
                 case 'CharCode':
                 case 'CharClass':
                     if (decoration || preDecoration) {
+                        // Avoid double % prefix for nested fragments
+                        let prefix = parentName.startsWith('%') ? '' : '%';
                         let newRule = {
-                            name: '%' + parentName + '[' + (++fragmentCounter.value) + ']',
+                            name: prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
                             bnf: [[convertRegex(x.text)]],
                             pinned
                         };
@@ -330,9 +335,7 @@ var BNF;
             }
         }
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        // Use a shared counter across all options for simpler naming
-        let fragmentCounter = { value: 0 };
-        let bnf = sequences.map((s) => getSubItems(tmpRules, s, name, fragmentCounter, parentAttributes ? parentAttributes : attributes));
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
         let rule = {
             name,
             bnf
