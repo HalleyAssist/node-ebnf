@@ -281,7 +281,7 @@ namespace BNF {
           }
           
           if (subitemCounter.value === 1 && !parentName.startsWith('%')) {
-            // First SubItem at top level: use single index
+            // First SubItem at top level: ALWAYS use single index
             name = '%' + parentName + '[' + topLevelOptionIndex + ']';
           } else {
             // Nested or subsequent SubItem: use double index
@@ -314,10 +314,21 @@ namespace BNF {
         case 'CharCode':
         case 'CharClass':
           if (decoration || preDecoration) {
-            // Avoid double % prefix for nested fragments
-            let prefix = parentName.startsWith('%') ? '' : '%';
+            // Increment the global subitem counter
+            subitemCounter.value++;
+            
+            let topLevelOptionIndex: number;
+            if (parentName.startsWith('%')) {
+              // Extract the top-level option index from parent name
+              const match = parentName.match(/\[(\d+)\]/);
+              topLevelOptionIndex = match ? parseInt(match[1]) : optionIndex;
+            } else {
+              topLevelOptionIndex = optionIndex;
+            }
+            
+            let baseName = parentName.startsWith('%') ? parentName.substring(1).split('[')[0] : parentName;
             let newRule = {
-              name: prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
+              name: '%' + baseName + '[' + topLevelOptionIndex + '][' + subitemCounter.value + ']',
               bnf: [[convertRegex(x.text, caseInsensitive)]]
             };
 
