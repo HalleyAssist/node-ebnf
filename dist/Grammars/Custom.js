@@ -253,7 +253,6 @@ var BNF;
         const children = seq.children;
         let subitemIndex = 0; // Track subitems within this sequence
         let itemPosition = 0; // Track all items for position-based naming
-        const isTopLevel = !parentName.startsWith('%');
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -274,32 +273,19 @@ var BNF;
                     subitemIndex++;
                     itemPosition++; // Increment position for SubItems
                     let name;
+                    // Build the fragment name by appending to parentName
+                    const prefix = parentName.startsWith('%') ? '' : '%';
                     if (isSingleSequence) {
                         // Single sequence: use position-based naming
-                        if (isTopLevel) {
-                            name = '%' + parentName + '[' + itemPosition + ']';
-                        }
-                        else {
-                            name = parentName + '[' + itemPosition + ']';
-                        }
+                        name = prefix + parentName + '[' + itemPosition + ']';
                     }
                     else {
                         // Multiple sequences: use option-based naming
-                        if (isTopLevel) {
-                            if (subitemIndex === 1) {
-                                name = '%' + parentName + '[' + optionIndex + ']';
-                            }
-                            else {
-                                name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-                            }
+                        if (subitemIndex === 1) {
+                            name = prefix + parentName + '[' + optionIndex + ']';
                         }
                         else {
-                            if (subitemIndex === 1) {
-                                name = parentName + '[' + optionIndex + ']';
-                            }
-                            else {
-                                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-                            }
+                            name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
                         }
                     }
                     createRule(tmpRules, x, name, parentAttributes);
@@ -331,32 +317,19 @@ var BNF;
                     if (decoration || preDecoration) {
                         subitemIndex++;
                         let name;
+                        // Build the fragment name by appending to parentName
+                        const prefix = parentName.startsWith('%') ? '' : '%';
                         if (isSingleSequence) {
                             // Single sequence: use position-based naming
-                            if (isTopLevel) {
-                                name = '%' + parentName + '[' + itemPosition + ']';
-                            }
-                            else {
-                                name = parentName + '[' + itemPosition + ']';
-                            }
+                            name = prefix + parentName + '[' + itemPosition + ']';
                         }
                         else {
                             // Multiple sequences: use option-based naming
-                            if (isTopLevel) {
-                                if (subitemIndex === 1) {
-                                    name = '%' + parentName + '[' + optionIndex + ']';
-                                }
-                                else {
-                                    name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-                                }
+                            if (subitemIndex === 1) {
+                                name = prefix + parentName + '[' + optionIndex + ']';
                             }
                             else {
-                                if (subitemIndex === 1) {
-                                    name = parentName + '[' + optionIndex + ']';
-                                }
-                                else {
-                                    name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
-                                }
+                                name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
                             }
                         }
                         let newRule = {
