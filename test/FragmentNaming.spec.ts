@@ -4,7 +4,7 @@ import * as expect from 'expect';
 import { Grammars } from '../src';
 
 describe('Fragment naming', () => {
-  it('should use hierarchical indices for W3C EBNF fragments', () => {
+  it('should use simple sequential indices for W3C EBNF fragments', () => {
     const grammar = `
       Rule ::= (A | B) (C | D)
       A ::= "a"
@@ -16,23 +16,23 @@ describe('Fragment naming', () => {
     const parser = new Grammars.W3C.Parser(grammar);
     const rules = parser.grammarRules;
 
-    // Find fragment rules - they should be named with hierarchical indices
+    // Find fragment rules - they should be named with simple sequential indices
     const fragmentRules = rules.filter(r => r.fragment && r.name.startsWith('%Rule'));
     
     expect(fragmentRules.length).toBeGreaterThan(0);
     
-    // Check that fragment names follow the pattern %RuleName[optionIndex][subitemIndex]
+    // Check that fragment names follow the pattern %RuleName[index]
     fragmentRules.forEach(rule => {
-      expect(rule.name).toMatch(/^%Rule\[\d+\]\[\d+\]$/);
+      expect(rule.name).toMatch(/^%Rule\[\d+\]$/);
     });
 
     // Verify specific fragment names exist
     const fragmentNames = fragmentRules.map(r => r.name);
-    expect(fragmentNames).toContain('%Rule[1][1]'); // First SubItem in first option
-    expect(fragmentNames).toContain('%Rule[1][2]'); // Second SubItem in first option
+    expect(fragmentNames).toContain('%Rule[1]'); // First SubItem
+    expect(fragmentNames).toContain('%Rule[2]'); // Second SubItem
   });
 
-  it('should reset subitem indices for each option', () => {
+  it('should use global sequential counter across all options', () => {
     const grammar = `
       Rule ::= (A B) | (C D)
       A ::= "a"
@@ -47,14 +47,14 @@ describe('Fragment naming', () => {
     const fragmentRules = rules.filter(r => r.fragment && r.name.startsWith('%Rule'));
     const fragmentNames = fragmentRules.map(r => r.name);
 
-    // First option should have [1][1]
-    expect(fragmentNames).toContain('%Rule[1][1]');
+    // First option should have [1]
+    expect(fragmentNames).toContain('%Rule[1]');
     
-    // Second option should have [2][1] (reset subitem index)
-    expect(fragmentNames).toContain('%Rule[2][1]');
+    // Second option should have [2] (not reset, continues counting)
+    expect(fragmentNames).toContain('%Rule[2]');
   });
 
-  it('should handle nested subitems correctly', () => {
+  it('should handle nested subitems with sequential numbering', () => {
     const grammar = `
       Rule ::= ((A B) | (C D))
       A ::= "a"
@@ -70,14 +70,14 @@ describe('Fragment naming', () => {
     const fragmentNames = fragmentRules.map(r => r.name);
 
     // Should have a top-level fragment for the outer SubItem
-    expect(fragmentNames.some(name => /^%Rule\[\d+\]\[\d+\]$/.test(name))).toBe(true);
+    expect(fragmentNames.some(name => /^%Rule\[\d+\]$/.test(name))).toBe(true);
     
-    // Nested fragments should have more bracket pairs (nested hierarchy)
-    // The inner SubItems will be named relative to their parent fragment
-    expect(fragmentNames.some(name => name.includes('[') && name.split('[').length > 3)).toBe(true);
+    // Nested fragments should have nested naming starting from parent
+    // The outer SubItem gets %Rule[1], the inner SubItems get %% prefix (nested in parent)
+    expect(fragmentNames.some(name => name.startsWith('%%Rule[1]'))).toBe(true);
   });
 
-  it('should use hierarchical indices for Custom grammar fragments', () => {
+  it('should use simple sequential indices for Custom grammar fragments', () => {
     const grammar = `
       Rule ::= (A | B) (C | D)
       A ::= "a"
@@ -93,14 +93,14 @@ describe('Fragment naming', () => {
     
     expect(fragmentRules.length).toBeGreaterThan(0);
     
-    // Check that fragment names follow the pattern
+    // Check that fragment names follow the pattern %RuleName[index]
     fragmentRules.forEach(rule => {
-      expect(rule.name).toMatch(/^%Rule\[\d+\]\[\d+\]$/);
+      expect(rule.name).toMatch(/^%Rule\[\d+\]$/);
     });
 
     const fragmentNames = fragmentRules.map(r => r.name);
-    expect(fragmentNames).toContain('%Rule[1][1]');
-    expect(fragmentNames).toContain('%Rule[1][2]');
+    expect(fragmentNames).toContain('%Rule[1]');
+    expect(fragmentNames).toContain('%Rule[2]');
   });
 
   it('should maintain parsability with new fragment names', () => {

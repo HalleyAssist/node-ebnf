@@ -223,11 +223,10 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
         return new RegExp(pattern, caseInsensitive ? 'i' : '');
     }
-    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false) {
+    function getSubItems(tmpRules, seq, parentName, fragmentCounter, caseInsensitive = false) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
-        let subitemIndex = 0; // Track subitems within this sequence
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -238,7 +237,7 @@ var BNF;
             let preDecoration = '';
             switch (x.type) {
                 case 'SubItem':
-                    let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
+                    let name = '%' + parentName + '[' + (++fragmentCounter.value) + ']';
                     createRule(tmpRules, x, name, caseInsensitive);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
@@ -266,7 +265,7 @@ var BNF;
                 case 'CharClass':
                     if (decoration || preDecoration) {
                         let newRule = {
-                            name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
+                            name: '%' + parentName + '[' + (++fragmentCounter.value) + ']',
                             bnf: [[convertRegex(x.text, caseInsensitive)]]
                         };
                         tmpRules.push(newRule);
@@ -290,7 +289,9 @@ var BNF;
         const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
         const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
+        // Use a shared counter across all options for simpler naming
+        let fragmentCounter = { value: 0 };
+        let bnf = sequences.map((s) => getSubItems(tmpRules, s, name, fragmentCounter, isCaseInsensitive));
         let rule = {
             name,
             bnf
