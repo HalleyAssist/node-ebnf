@@ -290,7 +290,12 @@ export class Parser {
     let line = 1;
     let column = 1;
     for (let i = 0; i < offset && i < txt.length; i++) {
-      if (txt[i] === '\n') {
+      // Handle \r\n as a single line ending
+      if (txt[i] === '\r' && i + 1 < txt.length && txt[i + 1] === '\n') {
+        line++;
+        column = 1;
+        i++; // Skip the \n
+      } else if (txt[i] === '\n' || txt[i] === '\r') {
         line++;
         column = 1;
       } else {
@@ -338,6 +343,7 @@ export class Parser {
 
     if (type.name == 'EOF') {
       if (txt.length) {
+        this.recordFailure(offset, 'EOF');
         return null;
       } else if (txt.length == 0) {
         return {
@@ -387,6 +393,7 @@ export class Parser {
       if (e instanceof ReferenceError) {
         console.error(e);
       }
+      this.recordFailure(offset, target);
       return null;
     }
 
@@ -568,6 +575,7 @@ export class Parser {
               let got = readToken(tmpTxt, phases[i] as RegExp);
 
               if (!got) {
+                this.recordFailure(offset + position, (phases[i] as RegExp).source);
                 continue optionsLoop;
               }
 
@@ -640,9 +648,10 @@ export class Parser {
       };
 
       let got: IToken;
+      let currentOffset = offset;
 
       do {
-        got = this.parse(tmpTxt, recoverableToken.recover, recursion + 1, offset);
+        got = this.parse(tmpTxt, recoverableToken.recover, recursion + 1, currentOffset);
 
         if (got) {
           new TokenError('Unexpected input: "' + tmp.text + `" Expecting: ${recoverableToken.name}`, tmp);
@@ -651,6 +660,7 @@ export class Parser {
           tmp.text = tmp.text + tmpTxt[0];
           tmp.end = tmp.text.length;
           tmpTxt = tmpTxt.substr(1);
+          currentOffset++;
         }
       } while (!got && tmpTxt.length > 0);
 

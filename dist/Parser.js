@@ -212,7 +212,13 @@ class Parser {
         let line = 1;
         let column = 1;
         for (let i = 0; i < offset && i < txt.length; i++) {
-            if (txt[i] === '\n') {
+            // Handle \r\n as a single line ending
+            if (txt[i] === '\r' && i + 1 < txt.length && txt[i + 1] === '\n') {
+                line++;
+                column = 1;
+                i++; // Skip the \n
+            }
+            else if (txt[i] === '\n' || txt[i] === '\r') {
                 line++;
                 column = 1;
             }
@@ -250,6 +256,7 @@ class Parser {
         let targetLex = findRuleByName(type.name, this);
         if (type.name == 'EOF') {
             if (txt.length) {
+                this.recordFailure(offset, 'EOF');
                 return null;
             }
             else if (txt.length == 0) {
@@ -296,6 +303,7 @@ class Parser {
             if (e instanceof ReferenceError) {
                 console.error(e);
             }
+            this.recordFailure(offset, target);
             return null;
         }
         if (expr) {
@@ -454,6 +462,7 @@ class Parser {
                         else {
                             let got = readToken(tmpTxt, phases[i]);
                             if (!got) {
+                                this.recordFailure(offset + position, phases[i].source);
                                 continue optionsLoop;
                             }
                             printable &&
@@ -505,8 +514,9 @@ class Parser {
                 rest: ''
             };
             let got;
+            let currentOffset = offset;
             do {
-                got = this.parse(tmpTxt, recoverableToken.recover, recursion + 1, offset);
+                got = this.parse(tmpTxt, recoverableToken.recover, recursion + 1, currentOffset);
                 if (got) {
                     new TokenError_1.TokenError('Unexpected input: "' + tmp.text + `" Expecting: ${recoverableToken.name}`, tmp);
                     break;
@@ -515,6 +525,7 @@ class Parser {
                     tmp.text = tmp.text + tmpTxt[0];
                     tmp.end = tmp.text.length;
                     tmpTxt = tmpTxt.substr(1);
+                    currentOffset++;
                 }
             } while (!got && tmpTxt.length > 0);
             if (tmp.text.length > 0 && got) {
