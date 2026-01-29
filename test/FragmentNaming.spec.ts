@@ -1,3 +1,5 @@
+declare var describe, it, require;
+
 import * as expect from 'expect';
 import { Grammars } from '../src';
 
