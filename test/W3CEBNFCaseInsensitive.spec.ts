@@ -57,8 +57,7 @@ describe('W3CEBNF Case Insensitive', () => {
     });
 
     it('should not parse lowercase "and" for case sensitive rule', () => {
-      let ast = parser.getAST('and');
-      expect(ast).toEqual(null);
+      expect(() => parser.getAST('and')).toThrow();
     });
 
     it('should parse "Not" in any case', () => {
