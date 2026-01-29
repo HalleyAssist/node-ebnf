@@ -240,11 +240,12 @@ namespace BNF {
     return new RegExp(pattern, caseInsensitive ? 'i' : '');
   }
 
-  function getSubItems(tmpRules, seq: IToken, parentName: string, optionIndex: number, caseInsensitive: boolean = false) {
+  function getSubItems(tmpRules, seq: IToken, parentName: string, optionIndex: number, caseInsensitive: boolean = false, isSingleSequence: boolean = false) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
     let subitemIndex = 0; // Track subitems within this sequence
+    let itemPosition = 0; // Track all items (including literals, NCNames, SubItems) for position-based naming
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -260,16 +261,35 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
+          subitemIndex++;
+          itemPosition++; // Increment position for SubItems
+          let name: string;
+
+          // Build the fragment name by appending to parentName
+          const prefix = parentName.startsWith('%') ? '' : '%';
+          
+          if (isSingleSequence) {
+            // Single sequence: use position-based naming
+            name = prefix + parentName + '[' + itemPosition + ']';
+          } else {
+            // Multiple sequences: use option-based naming
+            if (subitemIndex === 1) {
+              name = prefix + parentName + '[' + optionIndex + ']';
+            } else {
+              name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+            }
+          }
 
           createRule(tmpRules, x, name, caseInsensitive);
 
           bnfSeq.push(preDecoration + name + decoration);
           break;
         case 'NCName':
+          itemPosition++; // Increment position for NCNames
           bnfSeq.push(preDecoration + x.text + decoration);
           break;
         case 'StringLiteral':
+          itemPosition++; // Increment position for StringLiterals
           if (caseInsensitive) {
             // For case insensitive string literals, convert each character to a case-insensitive regex
             const literalText = x.text.slice(1, -1); // Remove quotes
@@ -286,9 +306,28 @@ namespace BNF {
           break;
         case 'CharCode':
         case 'CharClass':
+          itemPosition++; // Increment position for CharCode/CharClass
           if (decoration || preDecoration) {
+            subitemIndex++;
+            let name: string;
+
+            // Build the fragment name by appending to parentName
+            const prefix = parentName.startsWith('%') ? '' : '%';
+            
+            if (isSingleSequence) {
+              // Single sequence: use position-based naming
+              name = prefix + parentName + '[' + itemPosition + ']';
+            } else {
+              // Multiple sequences: use option-based naming
+              if (subitemIndex === 1) {
+                name = prefix + parentName + '[' + optionIndex + ']';
+              } else {
+                name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              }
+            }
+
             let newRule = {
-              name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
+              name,
               bnf: [[convertRegex(x.text, caseInsensitive)]]
             };
 
@@ -317,7 +356,11 @@ namespace BNF {
     const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
+
+    // Determine if this rule has a single sequence (no alternatives)
+    const isSingleSequence = sequences.length === 1;
+
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, isSingleSequence));
 
     let rule: IRule = {
       name,

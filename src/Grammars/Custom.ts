@@ -269,11 +269,12 @@ namespace BNF {
     );
   }
 
-  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any) {
+  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any, isSingleSequence: boolean = false) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
     let subitemIndex = 0; // Track subitems within this sequence
+    let itemPosition = 0; // Track all items for position-based naming
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -298,16 +299,35 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
+          subitemIndex++;
+          itemPosition++; // Increment position for SubItems
+          let name: string;
+
+          // Build the fragment name by appending to parentName
+          const prefix = parentName.startsWith('%') ? '' : '%';
+          
+          if (isSingleSequence) {
+            // Single sequence: use position-based naming
+            name = prefix + parentName + '[' + itemPosition + ']';
+          } else {
+            // Multiple sequences: use option-based naming
+            if (subitemIndex === 1) {
+              name = prefix + parentName + '[' + optionIndex + ']';
+            } else {
+              name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+            }
+          }
 
           createRule(tmpRules, x, name, parentAttributes);
 
           bnfSeq.push(preDecoration + name + decoration);
           break;
         case 'NCName':
+          itemPosition++; // Increment position for NCNames
           bnfSeq.push(preDecoration + x.text + decoration);
           break;
         case 'StringLiteral':
+          itemPosition++; // Increment position for StringLiterals
           if (decoration || preDecoration || !/^['"/()a-zA-Z0-9&_.:=,+*\-\^\\]+$/.test(x.text)) {
             bnfSeq.push(preDecoration + x.text + decoration);
           } else {
@@ -323,9 +343,28 @@ namespace BNF {
           break;
         case 'CharCode':
         case 'CharClass':
+          itemPosition++; // Increment position for CharCode/CharClass
           if (decoration || preDecoration) {
+            subitemIndex++;
+            let name: string;
+
+            // Build the fragment name by appending to parentName
+            const prefix = parentName.startsWith('%') ? '' : '%';
+            
+            if (isSingleSequence) {
+              // Single sequence: use position-based naming
+              name = prefix + parentName + '[' + itemPosition + ']';
+            } else {
+              // Multiple sequences: use option-based naming
+              if (subitemIndex === 1) {
+                name = prefix + parentName + '[' + optionIndex + ']';
+              } else {
+                name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              }
+            }
+
             let newRule: IRule = {
-              name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
+              name,
               bnf: [[convertRegex(x.text)]],
               pinned
             };
@@ -367,7 +406,11 @@ namespace BNF {
     }
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
+
+    // Determine if this rule has a single sequence (no alternatives)
+    const isSingleSequence = sequences.length === 1;
+
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes, isSingleSequence));
 
     let rule: IRule = {
       name,

@@ -185,7 +185,7 @@ var BNF;
     }
     /// Returns true if the rule is a string literal or regular expression without a descendant tree
     function isLonelyRule(name, parser) {
-        let rule = Parser_1.findRuleByName(name, parser);
+        let rule = (0, Parser_1.findRuleByName)(name, parser);
         return (rule &&
             rule.bnf.length == 1 &&
             rule.bnf[0].length == 1 &&
@@ -195,7 +195,7 @@ var BNF;
         return rules.map(x => getBNFRule(x, parser)).join(' ');
     }
     function getBNFBody(name, parser) {
-        let rule = Parser_1.findRuleByName(name, parser);
+        let rule = (0, Parser_1.findRuleByName)(name, parser);
         if (rule)
             return rule.bnf.map(x => getBNFChoice(x, parser)).join(' | ');
         return 'RULE_NOT_FOUND {' + name + '}';
@@ -223,11 +223,12 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
         return new RegExp(pattern, caseInsensitive ? 'i' : '');
     }
-    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false, isSingleSequence = false) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
         let subitemIndex = 0; // Track subitems within this sequence
+        let itemPosition = 0; // Track all items (including literals, NCNames, SubItems) for position-based naming
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -238,14 +239,33 @@ var BNF;
             let preDecoration = '';
             switch (x.type) {
                 case 'SubItem':
-                    let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
+                    subitemIndex++;
+                    itemPosition++; // Increment position for SubItems
+                    let name;
+                    // Build the fragment name by appending to parentName
+                    const prefix = parentName.startsWith('%') ? '' : '%';
+                    if (isSingleSequence) {
+                        // Single sequence: use position-based naming
+                        name = prefix + parentName + '[' + itemPosition + ']';
+                    }
+                    else {
+                        // Multiple sequences: use option-based naming
+                        if (subitemIndex === 1) {
+                            name = prefix + parentName + '[' + optionIndex + ']';
+                        }
+                        else {
+                            name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                        }
+                    }
                     createRule(tmpRules, x, name, caseInsensitive);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
                 case 'NCName':
+                    itemPosition++; // Increment position for NCNames
                     bnfSeq.push(preDecoration + x.text + decoration);
                     break;
                 case 'StringLiteral':
+                    itemPosition++; // Increment position for StringLiterals
                     if (caseInsensitive) {
                         // For case insensitive string literals, convert each character to a case-insensitive regex
                         const literalText = x.text.slice(1, -1); // Remove quotes
@@ -254,7 +274,7 @@ var BNF;
                                 bnfSeq.push(new RegExp('[' + c.toUpperCase() + c.toLowerCase() + ']'));
                             }
                             else {
-                                bnfSeq.push(new RegExp(Parser_1.escapeRegExp(c)));
+                                bnfSeq.push(new RegExp((0, Parser_1.escapeRegExp)(c)));
                             }
                         }
                     }
@@ -264,9 +284,27 @@ var BNF;
                     break;
                 case 'CharCode':
                 case 'CharClass':
+                    itemPosition++; // Increment position for CharCode/CharClass
                     if (decoration || preDecoration) {
+                        subitemIndex++;
+                        let name;
+                        // Build the fragment name by appending to parentName
+                        const prefix = parentName.startsWith('%') ? '' : '%';
+                        if (isSingleSequence) {
+                            // Single sequence: use position-based naming
+                            name = prefix + parentName + '[' + itemPosition + ']';
+                        }
+                        else {
+                            // Multiple sequences: use option-based naming
+                            if (subitemIndex === 1) {
+                                name = prefix + parentName + '[' + optionIndex + ']';
+                            }
+                            else {
+                                name = prefix + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                            }
+                        }
                         let newRule = {
-                            name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
+                            name,
                             bnf: [[convertRegex(x.text, caseInsensitive)]]
                         };
                         tmpRules.push(newRule);
@@ -290,7 +328,9 @@ var BNF;
         const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
         const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
+        // Determine if this rule has a single sequence (no alternatives)
+        const isSingleSequence = sequences.length === 1;
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, isSingleSequence));
         let rule = {
             name,
             bnf
