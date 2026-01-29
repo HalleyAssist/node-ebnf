@@ -304,7 +304,7 @@ namespace BNF {
             const seqChildren = seq.children.filter(c => c.type !== 'PrimaryDecoration' && c.type !== 'Minus' && c.type !== 'PrimaryPreDecoration');
             return seqChildren.length === 1 && seqChildren[0].type === 'SubItem';
           });
-          
+
           if (isTransparent) {
             // Transparent SubItem: create fragments for inner SubItems with single-index naming
             innerSequences.forEach((innerSeq, innerIdx) => {

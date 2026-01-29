@@ -1,5 +1,5 @@
 import { TokenError } from './TokenError';
-export type RulePrimary = string | RegExp;
+export declare type RulePrimary = string | RegExp;
 export interface IRule {
     name: string;
     bnf: RulePrimary[][];

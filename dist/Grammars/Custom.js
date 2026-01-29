@@ -210,7 +210,7 @@ var BNF;
     }
     /// Returns true if the rule is a string literal or regular expression without a descendant tree
     function isLonelyRule(name, parser) {
-        let rule = (0, Parser_1.findRuleByName)(name, parser);
+        let rule = Parser_1.findRuleByName(name, parser);
         return (rule &&
             rule.bnf.length == 1 &&
             rule.bnf[0].length == 1 &&
@@ -220,7 +220,7 @@ var BNF;
         return rules.map(x => getBNFRule(x, parser)).join(' ');
     }
     function getBNFBody(name, parser) {
-        let rule = (0, Parser_1.findRuleByName)(name, parser);
+        let rule = Parser_1.findRuleByName(name, parser);
         if (rule)
             return rule.bnf.map(x => getBNFChoice(x, parser)).join(' | ');
         return 'RULE_NOT_FOUND {' + name + '}';
@@ -308,7 +308,7 @@ var BNF;
                                 bnfSeq.push(new RegExp("[" + c.toUpperCase() + c.toLowerCase() + "]"));
                             }
                             else {
-                                bnfSeq.push(new RegExp((0, Parser_1.escapeRegExp)(c)));
+                                bnfSeq.push(new RegExp(Parser_1.escapeRegExp(c)));
                             }
                         }
                     }

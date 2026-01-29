@@ -145,4 +145,26 @@ describe('Fragment naming', () => {
       }
     });
   });
+
+  it('should handle nesting correctly', () => {
+    const grammar = `
+      Rule ::= ("a" | "b") | ("c" | "d")
+    `;
+
+    const parser = new Grammars.W3C.Parser(grammar);
+    const rules = parser.grammarRules;
+
+    console.log(require('util').inspect(rules, {depth: null}))
+
+    const fragmentRules = rules.filter(r => r.fragment);
+    const fragmentNames = fragmentRules.map(r => r.name);
+
+    // Check that no old-style fragment names exist (without brackets)
+    fragmentNames.forEach(name => {
+      // If it starts with %, it should have brackets
+      if (name.startsWith('%') && !name.includes('_')) {
+        expect(name).toMatch(/\[\d+\]/); // Should contain at least one bracketed index
+      }
+    });
+  });
 });
