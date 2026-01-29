@@ -190,15 +190,11 @@ value ::= "true" | "false" | "null"
         
         // Verify the failureTree structure
         expect(e.failureTree).toBeDefined();
-        expect(e.failureTree.length).toBeGreaterThan(0);
+        expect(e.failureTree.length).toBe(1);
         
-        // Find the 'value' node in the tree
-        const pairNode = e.failureTree.find(node => node.name === 'pair');
-        expect(pairNode).toBeDefined();
-        expect(pairNode.children).toBeDefined();
-        
-        const valueNode = pairNode.children.find(node => node.name === 'value');
-        expect(valueNode).toBeDefined();
+        // The failureTree should start at 'value' (the location of the failure)
+        const valueNode = e.failureTree[0];
+        expect(valueNode.name).toBe('value');
         expect(valueNode.children).toBeDefined();
         expect(valueNode.children.length).toBeGreaterThan(0);
         

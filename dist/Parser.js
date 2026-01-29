@@ -197,9 +197,10 @@ class Parser {
             if (this.furthestFailure) {
                 const position = this.calculatePosition(this.originalInput, this.furthestFailure.offset);
                 const found = this.furthestFailure.found;
-                // Build failure tree and extract parent-most rules
-                const failureTree = this.buildFailureTree(this.furthestFailure.tree);
+                // Extract parent-most rules first
                 const parentMostRules = this.extractParentMostRules(this.furthestFailure.tree);
+                // Build failure tree starting from the parent-most failing rules
+                const failureTree = this.buildFailureTree(this.furthestFailure.tree, parentMostRules);
                 throw new ParsingError_1.ParsingError('Failed to parse input', position, parentMostRules, found, failureTree);
             }
             else {
@@ -335,7 +336,7 @@ class Parser {
         }
         return false;
     }
-    buildFailureTree(tree) {
+    buildFailureTree(tree, startRules) {
         const buildNode = (ruleName) => {
             const node = { name: ruleName };
             if (tree.has(ruleName)) {
@@ -357,6 +358,10 @@ class Parser {
             }
             return node;
         };
+        // If startRules are provided, start from those rules
+        if (startRules && startRules.length > 0) {
+            return startRules.map(rule => buildNode(rule));
+        }
         // Start from root if it exists, otherwise from parent-most rules
         if (tree.has('__ROOT__')) {
             const rootChildren = Array.from(tree.get('__ROOT__'));
