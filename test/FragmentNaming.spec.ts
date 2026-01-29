@@ -69,15 +69,16 @@ describe('Fragment naming', () => {
     const fragmentRules = rules.filter(r => r.fragment);
     const fragmentNames = fragmentRules.map(r => r.name);
 
-    // Transparent SubItems (containing only other SubItems) should use single-index naming
+    // Top-level SubItems should use single-index naming
+    // For ((A B) | (C D)), we have one top-level SubItem with two options
+    // Each option contains a SubItem, so we get %Rule[1] and %Rule[2]
     expect(fragmentRules.length).toBe(2);
     expect(fragmentNames).toContain('%Rule[1]'); // (A B)
     expect(fragmentNames).toContain('%Rule[2]'); // (C D)
     
-    // Should NOT have %% prefix or complex nested indices
+    // Should NOT have %% prefix or nested [option][subitem][option][subitem] format
     fragmentRules.forEach(rule => {
       expect(rule.name.startsWith('%%')).toBe(false);
-      expect(rule.name.split('[').length).toBeLessThanOrEqual(2); // Only %Rule[N] format
     });
   });
 

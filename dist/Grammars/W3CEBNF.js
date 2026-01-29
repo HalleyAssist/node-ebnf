@@ -185,7 +185,7 @@ var BNF;
     }
     /// Returns true if the rule is a string literal or regular expression without a descendant tree
     function isLonelyRule(name, parser) {
-        let rule = Parser_1.findRuleByName(name, parser);
+        let rule = (0, Parser_1.findRuleByName)(name, parser);
         return (rule &&
             rule.bnf.length == 1 &&
             rule.bnf[0].length == 1 &&
@@ -195,7 +195,7 @@ var BNF;
         return rules.map(x => getBNFRule(x, parser)).join(' ');
     }
     function getBNFBody(name, parser) {
-        let rule = Parser_1.findRuleByName(name, parser);
+        let rule = (0, Parser_1.findRuleByName)(name, parser);
         if (rule)
             return rule.bnf.map(x => getBNFChoice(x, parser)).join(' | ');
         return 'RULE_NOT_FOUND {' + name + '}';
@@ -223,11 +223,14 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1');
         return new RegExp(pattern, caseInsensitive ? 'i' : '');
     }
-    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, caseInsensitive = false, subitemCounter) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
-        let subitemIndex = 0; // Track subitems within this sequence
+        // If no counter provided, create one for this option (top-level call)
+        if (!subitemCounter) {
+            subitemCounter = { value: 0 };
+        }
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -238,32 +241,31 @@ var BNF;
             let preDecoration = '';
             switch (x.type) {
                 case 'SubItem':
-                    // Check if this SubItem is transparent (contains only other SubItems in choices)
-                    let innerSequences = x.children.filter(c => c.type === 'SequenceOrDifference');
-                    let isTransparent = innerSequences.length > 1 && innerSequences.every(seq => {
-                        const seqChildren = seq.children.filter(c => c.type !== 'PrimaryDecoration' && c.type !== 'Minus');
-                        return seqChildren.length === 1 && seqChildren[0].type === 'SubItem';
-                    });
-                    if (isTransparent) {
-                        // Transparent SubItem: create fragments for inner SubItems with single-index naming
-                        // and expand the parent's bnf to have multiple options
-                        innerSequences.forEach((innerSeq, innerIdx) => {
-                            const innerSubItem = innerSeq.children.find(c => c.type === 'SubItem');
-                            if (innerSubItem) {
-                                const innerName = '%' + parentName + '[' + (innerIdx + 1) + ']';
-                                createRule(tmpRules, innerSubItem, innerName, caseInsensitive);
-                            }
-                        });
-                        // Mark this for expansion by setting a special property
-                        bnfSeq._transparentExpansion = innerSequences.length;
+                    // Increment the global subitem counter for this option
+                    subitemCounter.value++;
+                    let name;
+                    let topLevelOptionIndex;
+                    if (parentName.startsWith('%')) {
+                        // Extract the top-level option index from parent name
+                        // E.g., "%Rule[2]" -> extract "2"
+                        const match = parentName.match(/\[(\d+)\]/);
+                        topLevelOptionIndex = match ? parseInt(match[1]) : optionIndex;
                     }
                     else {
-                        // Normal SubItem
-                        let prefix = parentName.startsWith('%') ? '' : '%';
-                        let name = prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
-                        createRule(tmpRules, x, name, caseInsensitive);
-                        bnfSeq.push(preDecoration + name + decoration);
+                        // This is a top-level call
+                        topLevelOptionIndex = optionIndex;
                     }
+                    if (subitemCounter.value === 1 && !parentName.startsWith('%')) {
+                        // First SubItem at top level: use single index
+                        name = '%' + parentName + '[' + topLevelOptionIndex + ']';
+                    }
+                    else {
+                        // Nested or subsequent SubItem: use double index
+                        let baseName = parentName.startsWith('%') ? parentName.substring(1).split('[')[0] : parentName;
+                        name = '%' + baseName + '[' + topLevelOptionIndex + '][' + subitemCounter.value + ']';
+                    }
+                    createRule(tmpRules, x, name, caseInsensitive, subitemCounter);
+                    bnfSeq.push(preDecoration + name + decoration);
                     break;
                 case 'NCName':
                     bnfSeq.push(preDecoration + x.text + decoration);
@@ -277,7 +279,7 @@ var BNF;
                                 bnfSeq.push(new RegExp('[' + c.toUpperCase() + c.toLowerCase() + ']'));
                             }
                             else {
-                                bnfSeq.push(new RegExp(Parser_1.escapeRegExp(c)));
+                                bnfSeq.push(new RegExp((0, Parser_1.escapeRegExp)(c)));
                             }
                         }
                     }
@@ -310,21 +312,12 @@ var BNF;
         }
         return bnfSeq;
     }
-    function createRule(tmpRules, token, name, caseInsensitive = false) {
+    function createRule(tmpRules, token, name, caseInsensitive = false, subitemCounter) {
         // Check if this production uses the case insensitive operator ||=
         const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
         const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
-        // Check if we have a transparent expansion
-        if (bnf.length === 1 && bnf[0]._transparentExpansion) {
-            const expansionCount = bnf[0]._transparentExpansion;
-            // Replace the single bnf option with multiple options referencing the inner fragments
-            bnf = [];
-            for (let i = 0; i < expansionCount; i++) {
-                bnf.push(['%' + name + '[' + (i + 1) + ']']);
-            }
-        }
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, subitemCounter));
         let rule = {
             name,
             bnf
@@ -333,7 +326,6 @@ var BNF;
         for (const x of bnf) {
             recover = recover || x['recover'];
             delete x['recover'];
-            delete x['_transparentExpansion'];
         }
         if (name.indexOf('%') == 0)
             rule.fragment = true;

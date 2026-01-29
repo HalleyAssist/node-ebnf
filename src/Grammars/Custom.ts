@@ -269,11 +269,15 @@ namespace BNF {
     );
   }
 
-  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any) {
+  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any, subitemCounter?: {value: number}) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
-    let subitemIndex = 0; // Track subitems within this sequence
+    
+    // If no counter provided, create one for this option (top-level call)
+    if (!subitemCounter) {
+      subitemCounter = {value: 0};
+    }
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -298,31 +302,34 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          // Check if this SubItem is transparent (contains only other SubItems in choices)
-          let innerSequences = x.children.filter(c => c.type === 'SequenceOrDifference');
-          let isTransparent = innerSequences.length > 1 && innerSequences.every(seq => {
-            const seqChildren = seq.children.filter(c => c.type !== 'PrimaryDecoration' && c.type !== 'Minus' && c.type !== 'PrimaryPreDecoration');
-            return seqChildren.length === 1 && seqChildren[0].type === 'SubItem';
-          });
-
-          if (isTransparent) {
-            // Transparent SubItem: create fragments for inner SubItems with single-index naming
-            innerSequences.forEach((innerSeq, innerIdx) => {
-              const innerSubItem = innerSeq.children.find(c => c.type === 'SubItem');
-              if (innerSubItem) {
-                const innerName = '%' + parentName + '[' + (innerIdx + 1) + ']';
-                createRule(tmpRules, innerSubItem, innerName, parentAttributes);
-              }
-            });
-            // Mark this for expansion
-            (bnfSeq as any)._transparentExpansion = innerSequences.length;
+          // Increment the global subitem counter for this option
+          subitemCounter.value++;
+          
+          let name: string;
+          let topLevelOptionIndex: number;
+          
+          if (parentName.startsWith('%')) {
+            // Extract the top-level option index from parent name
+            // E.g., "%Rule[2]" -> extract "2"
+            const match = parentName.match(/\[(\d+)\]/);
+            topLevelOptionIndex = match ? parseInt(match[1]) : optionIndex;
           } else {
-            // Normal SubItem
-            let prefix = parentName.startsWith('%') ? '' : '%';
-            let name = prefix + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
-            createRule(tmpRules, x, name, parentAttributes);
-            bnfSeq.push(preDecoration + name + decoration);
+            // This is a top-level call
+            topLevelOptionIndex = optionIndex;
           }
+          
+          if (subitemCounter.value === 1 && !parentName.startsWith('%')) {
+            // First SubItem at top level: use single index
+            name = '%' + parentName + '[' + topLevelOptionIndex + ']';
+          } else {
+            // Nested or subsequent SubItem: use double index
+            let baseName = parentName.startsWith('%') ? parentName.substring(1).split('[')[0] : parentName;
+            name = '%' + baseName + '[' + topLevelOptionIndex + '][' + subitemCounter.value + ']';
+          }
+
+          createRule(tmpRules, x, name, parentAttributes, subitemCounter);
+
+          bnfSeq.push(preDecoration + name + decoration);
           break;
         case 'NCName':
           bnfSeq.push(preDecoration + x.text + decoration);
@@ -372,7 +379,7 @@ namespace BNF {
     return bnfSeq;
   }
 
-  function createRule(tmpRules: IRule[], token: IToken, name: string, parentAttributes: any = undefined) {
+  function createRule(tmpRules: IRule[], token: IToken, name: string, parentAttributes: any = undefined, subitemCounter?: {value: number}) {
     let attrNode = token.children.filter(x => x.type == 'Attributes')[0];
 
     let attributes: any = {};
@@ -389,17 +396,7 @@ namespace BNF {
     }
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
-
-    // Check if we have a transparent expansion
-    if (bnf.length === 1 && (bnf[0] as any)._transparentExpansion) {
-      const expansionCount = (bnf[0] as any)._transparentExpansion;
-      // Replace the single bnf option with multiple options referencing the inner fragments
-      bnf = [];
-      for (let i = 0; i < expansionCount; i++) {
-        bnf.push(['%' + name + '[' + (i + 1) + ']']);
-      }
-    }
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes, subitemCounter));
 
     let rule: IRule = {
       name,
@@ -431,11 +428,6 @@ namespace BNF {
     rule.fragment = rule.fragment || attributes['fragment'] == 'true';
 
     rule.simplifyWhenOneChildren = attributes['simplifyWhenOneChildren'] == 'true';
-
-    // Clean up temporary properties
-    for (const x of bnf) {
-      delete x['_transparentExpansion'];
-    }
 
     tmpRules.push(rule);
   }
