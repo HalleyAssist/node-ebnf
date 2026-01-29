@@ -42,7 +42,7 @@
     "child_process": "^1.0.2",
     "coveralls": "^3.1.0",
     "expect": "^24.9.0",
-    "git-rev-sync": "^2.1.0",
+    "git-rev-sync": "^3.0.2",
     "istanbul": "^0.4.5",
     "mocha": "^6.2.3",
     "node-fetch": "^2.6.0",
