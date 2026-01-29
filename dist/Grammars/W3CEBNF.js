@@ -228,6 +228,7 @@ var BNF;
         let bnfSeq = [];
         const children = seq.children;
         let subitemIndex = 0; // Track subitems within this sequence
+        let itemPosition = 0; // Track all items (including literals, NCNames, SubItems) for position-based naming
         const isTopLevel = !parentName.startsWith('%');
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
@@ -240,10 +241,18 @@ var BNF;
             switch (x.type) {
                 case 'SubItem':
                     subitemIndex++;
+                    itemPosition++; // Increment position for SubItems
                     let name;
                     if (globalFragmentCounter) {
-                        // Using global counter for single-sequence top-level rules
-                        name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                        // Using global counter for single-sequence rules (both top-level and nested)
+                        // Use itemPosition instead of counter value for nested fragments to reflect actual position
+                        if (isTopLevel) {
+                            name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                        }
+                        else {
+                            // For nested fragments, use itemPosition to number by actual sequence position
+                            name = parentName + '[' + itemPosition + ']';
+                        }
                     }
                     else if (isTopLevel) {
                         // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
@@ -255,16 +264,23 @@ var BNF;
                         }
                     }
                     else {
-                        // Nested within a fragment, append subitem index (parentName already has %)
-                        name = parentName + '[' + subitemIndex + ']';
+                        // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
+                        if (subitemIndex === 1) {
+                            name = parentName + '[' + optionIndex + ']';
+                        }
+                        else {
+                            name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                        }
                     }
                     createRule(tmpRules, x, name, caseInsensitive);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
                 case 'NCName':
+                    itemPosition++; // Increment position for NCNames
                     bnfSeq.push(preDecoration + x.text + decoration);
                     break;
                 case 'StringLiteral':
+                    itemPosition++; // Increment position for StringLiterals
                     if (caseInsensitive) {
                         // For case insensitive string literals, convert each character to a case-insensitive regex
                         const literalText = x.text.slice(1, -1); // Remove quotes
@@ -283,12 +299,20 @@ var BNF;
                     break;
                 case 'CharCode':
                 case 'CharClass':
+                    itemPosition++; // Increment position for CharCode/CharClass
                     if (decoration || preDecoration) {
                         subitemIndex++;
                         let name;
                         if (globalFragmentCounter) {
-                            // Using global counter for single-sequence top-level rules
-                            name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                            // Using global counter for single-sequence rules (both top-level and nested)
+                            // Use itemPosition for nested fragments to reflect actual position
+                            if (isTopLevel) {
+                                name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+                            }
+                            else {
+                                // For nested fragments, use itemPosition to number by actual sequence position
+                                name = parentName + '[' + itemPosition + ']';
+                            }
                         }
                         else if (isTopLevel) {
                             // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
@@ -300,8 +324,13 @@ var BNF;
                             }
                         }
                         else {
-                            // Nested within a fragment, append subitem index (parentName already has %)
-                            name = parentName + '[' + subitemIndex + ']';
+                            // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
+                            if (subitemIndex === 1) {
+                                name = parentName + '[' + optionIndex + ']';
+                            }
+                            else {
+                                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+                            }
                         }
                         let newRule = {
                             name,
@@ -328,9 +357,9 @@ var BNF;
         const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
         const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
         let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-        // Determine if we should use global counter (only for top-level rules with single sequence)
+        // Determine if we should use global counter (for rules with single sequence, both top-level and nested)
         const isTopLevel = !name.startsWith('%');
-        const useSingleSequenceNaming = isTopLevel && sequences.length === 1;
+        const useSingleSequenceNaming = sequences.length === 1;
         const globalFragmentCounter = useSingleSequenceNaming ? { value: 1 } : undefined;
         let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive, globalFragmentCounter));
         let rule = {

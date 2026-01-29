@@ -274,6 +274,7 @@ namespace BNF {
     let bnfSeq = [];
     const children = seq.children;
     let subitemIndex = 0; // Track subitems within this sequence
+    let itemPosition = 0; // Track all items for position-based naming
     const isTopLevel = !parentName.startsWith('%');
 
     for (let i = 0; i < children.length; i++) {
@@ -300,11 +301,18 @@ namespace BNF {
       switch (x.type) {
         case 'SubItem':
           subitemIndex++;
+          itemPosition++; // Increment position for SubItems
           let name: string;
 
           if (globalFragmentCounter) {
-            // Using global counter for single-sequence top-level rules
-            name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+            // Using global counter for single-sequence rules (both top-level and nested)
+            // Use itemPosition for nested fragments to reflect actual position
+            if (isTopLevel) {
+              name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+            } else {
+              // For nested fragments, use itemPosition to number by actual sequence position
+              name = parentName + '[' + itemPosition + ']';
+            }
           } else if (isTopLevel) {
             // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
             if (subitemIndex === 1) {
@@ -313,8 +321,12 @@ namespace BNF {
               name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
             }
           } else {
-            // Nested within a fragment, append subitem index (parentName already has %)
-            name = parentName + '[' + subitemIndex + ']';
+            // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
+            if (subitemIndex === 1) {
+              name = parentName + '[' + optionIndex + ']';
+            } else {
+              name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+            }
           }
 
           createRule(tmpRules, x, name, parentAttributes);
@@ -322,9 +334,11 @@ namespace BNF {
           bnfSeq.push(preDecoration + name + decoration);
           break;
         case 'NCName':
+          itemPosition++; // Increment position for NCNames
           bnfSeq.push(preDecoration + x.text + decoration);
           break;
         case 'StringLiteral':
+          itemPosition++; // Increment position for StringLiterals
           if (decoration || preDecoration || !/^['"/()a-zA-Z0-9&_.:=,+*\-\^\\]+$/.test(x.text)) {
             bnfSeq.push(preDecoration + x.text + decoration);
           } else {
@@ -340,13 +354,20 @@ namespace BNF {
           break;
         case 'CharCode':
         case 'CharClass':
+          itemPosition++; // Increment position for CharCode/CharClass
           if (decoration || preDecoration) {
             subitemIndex++;
             let name: string;
 
             if (globalFragmentCounter) {
-              // Using global counter for single-sequence top-level rules
-              name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+              // Using global counter for single-sequence rules (both top-level and nested)
+              // Use itemPosition for nested fragments to reflect actual position
+              if (isTopLevel) {
+                name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+              } else {
+                // For nested fragments, use itemPosition to number by actual sequence position
+                name = parentName + '[' + itemPosition + ']';
+              }
             } else if (isTopLevel) {
               // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
               if (subitemIndex === 1) {
@@ -355,8 +376,12 @@ namespace BNF {
                 name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
               }
             } else {
-              // Nested within a fragment, append subitem index (parentName already has %)
-              name = parentName + '[' + subitemIndex + ']';
+              // Nested within a fragment with multiple sequences: same logic as top-level but parentName already has %
+              if (subitemIndex === 1) {
+                name = parentName + '[' + optionIndex + ']';
+              } else {
+                name = parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              }
             }
 
             let newRule: IRule = {
