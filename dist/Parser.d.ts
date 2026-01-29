@@ -1,5 +1,5 @@
 import { TokenError } from './TokenError';
-export declare type RulePrimary = string | RegExp;
+export type RulePrimary = string | RegExp;
 export interface IRule {
     name: string;
     bnf: RulePrimary[][];
@@ -50,12 +50,26 @@ export declare class Parser {
     private readonly debug;
     private furthestFailure;
     private originalInput;
+    private parseStack;
     cachedRules: IDictionary<IRule>;
     constructor(grammarRules: IRule[], options?: Partial<IParserOptions>);
     getAST(txt: string, target?: string): IToken;
     emitSource(): string;
     private calculatePosition;
     private recordFailure;
+    private recordParentChildRelationship;
+    private extractParentMostRules;
+    /**
+     * Determines if a value represents a terminal/literal rather than a non-terminal rule.
+     */
+    private isLiteralOrTerminal;
+    /**
+     * Extracts the expected value from a terminal/literal.
+     * - For string literals (quoted), removes the quotes and returns the content
+     * - For regex patterns, returns the RegExp instance
+     */
+    private extractExpectedValue;
+    private buildFailureTree;
     parse(txt: string, target: string, recursion?: number, offset?: number): IToken;
     private parseRecovery;
 }

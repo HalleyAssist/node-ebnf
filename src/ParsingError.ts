@@ -4,17 +4,25 @@ export interface IParsingErrorPosition {
   column: number;
 }
 
+export interface IFailureTreeNode {
+  name: string;
+  expected?: string | RegExp;
+  children?: IFailureTreeNode[];
+}
+
 export class ParsingError extends Error {
   public readonly position: IParsingErrorPosition;
   public readonly expected: string[];
   public readonly found: string;
+  public readonly failureTree?: IFailureTreeNode[];
 
-  constructor(message: string, position: IParsingErrorPosition, expected: string[], found: string) {
+  constructor(message: string, position: IParsingErrorPosition, expected: string[], found: string, failureTree?: IFailureTreeNode[]) {
     super(message);
     this.name = 'ParsingError';
     this.position = position;
     this.expected = expected;
     this.found = found;
+    this.failureTree = failureTree;
     
     // Maintain proper prototype chain for instanceof checks
     Object.setPrototypeOf(this, ParsingError.prototype);

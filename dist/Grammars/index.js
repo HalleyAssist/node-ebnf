@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.Custom = exports.W3C = exports.BNF = void 0;
 var BNF_1 = require("./BNF");
 Object.defineProperty(exports, "BNF", { enumerable: true, get: function () { return BNF_1.default; } });
 var W3CEBNF_1 = require("./W3CEBNF");

@@ -6,7 +6,7 @@ const preDecorationRE = /^(@|&|!)/;
 const WS_RULE = 'WS';
 
 import { TokenError } from './TokenError';
-import { ParsingError, IParsingErrorPosition } from './ParsingError';
+import { ParsingError, IParsingErrorPosition, IFailureTreeNode } from './ParsingError';
 
 export type RulePrimary = string | RegExp;
 
@@ -152,6 +152,8 @@ interface IFailureInfo {
   offset: number;
   expected: Set<string>;
   found: string;
+  tree: Map<string, Set<string | RegExp>>; // parent -> children that failed (can be strings or RegExp)
+  regexMap: Map<string, RegExp>; // Track original regex instances by their string representation
 }
 
 const ignoreMissingRules = ['EOF'];
@@ -160,6 +162,7 @@ export class Parser {
   private readonly debug;
   private furthestFailure: IFailureInfo | null = null;
   private originalInput: string = '';
+  private parseStack: string[] = []; // Track parsing context
 
   cachedRules: IDictionary<IRule> = {};
   constructor(public grammarRules: IRule[], public options?: Partial<IParserOptions>) {
@@ -235,6 +238,7 @@ export class Parser {
     // Reset failure tracking for each new parse
     this.furthestFailure = null;
     this.originalInput = txt;
+    this.parseStack = [];
 
     let result = this.parse(txt, target, 0, 0);
 
@@ -260,13 +264,20 @@ export class Parser {
       // Parsing failed completely - throw ParsingError
       if (this.furthestFailure) {
         const position = this.calculatePosition(this.originalInput, this.furthestFailure.offset);
-        const expected = Array.from(this.furthestFailure.expected);
         const found = this.furthestFailure.found;
+        
+        // Extract parent-most rules first
+        const parentMostRules = this.extractParentMostRules(this.furthestFailure.tree);
+        
+        // Build failure tree starting from the parent-most failing rules
+        const failureTree = this.buildFailureTree(this.furthestFailure.tree, parentMostRules, this.furthestFailure.regexMap);
+        
         throw new ParsingError(
           'Failed to parse input',
           position,
-          expected,
-          found
+          parentMostRules,
+          found,
+          failureTree
         );
       } else {
         // Fallback if no failure was tracked
@@ -305,22 +316,243 @@ export class Parser {
     return { offset, line, column };
   }
 
-  private recordFailure(offset: number, expected: string) {
+  private recordFailure(offset: number, expected: string | RegExp) {
+    const expectedKey = expected instanceof RegExp ? expected.source : expected;
+    
     if (!this.furthestFailure || offset > this.furthestFailure.offset) {
       // This is a new furthest failure
-      const found = offset < this.originalInput.length 
-        ? this.originalInput.charAt(offset)
-        : 'end of input';
+      let found: string;
+      if (offset >= this.originalInput.length) {
+        found = 'end of input';
+      } else {
+        // Extract a meaningful token/substring from the failure position
+        const remaining = this.originalInput.substring(offset);
+        // Skip whitespace using replace
+        const trimmed = remaining.replace(/^\s+/, '');
+        if (trimmed.length === 0) {
+          found = 'end of input';
+        } else {
+          // Try to extract a word/token (alphanumeric + some symbols)
+          const match = trimmed.match(/^[^\s\}\]\),;]+/);
+          if (match && match[0].length > 0) {
+            found = match[0];
+          } else {
+            // Fallback to first character after whitespace
+            found = trimmed.charAt(0);
+          }
+        }
+      }
       
       this.furthestFailure = {
         offset,
-        expected: new Set([expected]),
-        found
+        expected: new Set([expectedKey]),
+        found,
+        tree: new Map(),
+        regexMap: new Map()
       };
+      
+      // Store regex instance if it's a RegExp
+      if (expected instanceof RegExp) {
+        this.furthestFailure.regexMap.set(expected.source, expected);
+      }
+      
+      this.recordParentChildRelationship(expected);
+      this.furthestFailure.expected.add(expectedKey);
     } else if (offset === this.furthestFailure.offset) {
       // Same position, add to expected set
-      this.furthestFailure.expected.add(expected);
+      this.furthestFailure.expected.add(expectedKey);
+      
+      // Store regex instance if it's a RegExp
+      if (expected instanceof RegExp) {
+        this.furthestFailure.regexMap.set(expected.source, expected);
+      }
+      
+      this.recordParentChildRelationship(expected);
     }
+  }
+
+  private recordParentChildRelationship(expected: string | RegExp) {
+    if (!this.furthestFailure) return;
+    
+    if (this.parseStack.length > 0) {
+      const parent = this.parseStack[this.parseStack.length - 1];
+      if (!this.furthestFailure.tree.has(parent)) {
+        this.furthestFailure.tree.set(parent, new Set());
+      }
+      this.furthestFailure.tree.get(parent)!.add(expected);
+    } else {
+      // No parent, this is a top-level failure
+      if (!this.furthestFailure.tree.has('__ROOT__')) {
+        this.furthestFailure.tree.set('__ROOT__', new Set());
+      }
+      this.furthestFailure.tree.get('__ROOT__')!.add(expected);
+    }
+  }
+
+  private extractParentMostRules(tree: Map<string, Set<string | RegExp>>): string[] {
+    // The "parent most failing option" is the rule we were trying to match
+    // when all its alternatives failed. In the tree structure, this is typically
+    // the direct child of the top-most parent that has alternatives.
+    
+    // Helper to get string name from value
+    const getName = (value: string | RegExp) => value instanceof RegExp ? value.source : value;
+    
+    // If we have __ROOT__, find its direct children that have alternatives
+    if (tree.has('__ROOT__')) {
+      const rootChildren = Array.from(tree.get('__ROOT__')!).map(getName);
+      // Return root children that have their own children (alternatives)
+      const result = rootChildren.filter(child => tree.has(child) && tree.get(child)!.size > 0);
+      if (result.length > 0) {
+        return result;
+      }
+      // If none have children, return the root children themselves
+      return rootChildren;
+    }
+    
+    // Find the top-most parent (not a child of any other parent)
+    const allChildren = new Set<string>();
+    const allParents = new Set<string>();
+    
+    for (const [parent, children] of tree.entries()) {
+      allParents.add(parent);
+      for (const child of children) {
+        allChildren.add(getName(child));
+      }
+    }
+    
+    const topMostParents = Array.from(allParents).filter(parent => !allChildren.has(parent));
+    
+    // For each top-most parent, get its direct children that have alternatives
+    const result: string[] = [];
+    for (const parent of topMostParents) {
+      if (tree.has(parent)) {
+        const children = Array.from(tree.get(parent)!);
+        for (const child of children) {
+          const childName = getName(child);
+          if (tree.has(childName) && tree.get(childName)!.size > 0) {
+            result.push(childName);
+          }
+        }
+      }
+    }
+    
+    if (result.length > 0) {
+      return result;
+    }
+    
+    // Fallback: return top-most parents
+    if (topMostParents.length > 0) {
+      return topMostParents;
+    }
+    
+    // Last fallback: return all unique rules
+    return Array.from(new Set([...allParents, ...allChildren]));
+  }
+
+  /**
+   * Determines if a value represents a terminal/literal rather than a non-terminal rule.
+   */
+  private isLiteralOrTerminal(value: string | RegExp): boolean {
+    if (value instanceof RegExp) {
+      return true;
+    }
+    // Check if it's a literal (starts with " or ')
+    if (value.startsWith('"') || value.startsWith("'")) {
+      return true;
+    }
+    // Check if it's a regex pattern (starts with [ or contains #x followed by hex digits)
+    if (value.startsWith('[') || /\#x[0-9a-fA-F]/.test(value)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Extracts the expected value from a terminal/literal.
+   * - For string literals (quoted), removes the quotes and returns the content
+   * - For regex patterns, returns the RegExp instance
+   */
+  private extractExpectedValue(value: string | RegExp, regexMap: Map<string, RegExp>): string | RegExp {
+    if (value instanceof RegExp) {
+      return value;
+    }
+    
+    // If it's a string literal (starts with " or '), parse it to remove quotes
+    if (value.startsWith('"')) {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    } else if (value.startsWith("'")) {
+      // Single-quoted string - remove quotes
+      return value.replace(/^'(.+)'$/, '$1').replace(/\\'/g, "'");
+    }
+    
+    // Check if this is a regex pattern string that we have a RegExp instance for
+    if (regexMap.has(value)) {
+      return regexMap.get(value)!;
+    }
+    
+    // For other terminals, return as-is
+    return value;
+  }
+
+  private buildFailureTree(tree: Map<string, Set<string | RegExp>>, startRules?: string[], regexMap?: Map<string, RegExp>): IFailureTreeNode[] {
+    const buildNode = (value: string | RegExp): IFailureTreeNode => {
+      const name = value instanceof RegExp ? value.source : value;
+      const node: IFailureTreeNode = { name };
+      
+      if (tree.has(name)) {
+        const children = Array.from(tree.get(name)!);
+        if (children.length > 0) {
+          // If this rule has exactly one child and that child is a terminal,
+          // set expected to that terminal instead of creating children
+          if (children.length === 1 && this.isLiteralOrTerminal(children[0])) {
+            node.expected = this.extractExpectedValue(children[0], regexMap || new Map());
+          } else {
+            // Build child nodes
+            const childNodes = children.map(child => buildNode(child));
+            
+            // Check if this node should be flattened:
+            // If it has exactly one child AND that child has an expected value (is terminal)
+            if (childNodes.length === 1 && childNodes[0].expected !== undefined && childNodes[0].children === undefined) {
+              node.expected = childNodes[0].expected;
+            } else {
+              node.children = childNodes;
+            }
+          }
+        }
+      } else if (this.isLiteralOrTerminal(value)) {
+        // If this is a terminal/literal with no children, set expected to itself
+        node.expected = this.extractExpectedValue(value, regexMap || new Map());
+      }
+      
+      return node;
+    };
+    
+    // If startRules are provided, start from those rules
+    if (startRules && startRules.length > 0) {
+      return startRules.map(rule => buildNode(rule));
+    }
+    
+    // Start from root if it exists, otherwise from parent-most rules
+    if (tree.has('__ROOT__')) {
+      const rootChildren = Array.from(tree.get('__ROOT__')!);
+      return rootChildren.map(child => buildNode(child));
+    }
+    
+    // Find parent-most rules (rules that are not children of other rules)
+    const allChildren = new Set<string>();
+    for (const children of tree.values()) {
+      for (const child of children) {
+        const childName = child instanceof RegExp ? child.source : child;
+        allChildren.add(childName);
+      }
+    }
+    
+    const parentMost = Array.from(tree.keys()).filter(parent => !allChildren.has(parent));
+    return parentMost.map(parent => buildNode(parent));
   }
 
   parse(txt: string, target: string, recursion = 0, offset = 0): IToken {
@@ -411,6 +643,9 @@ export class Parser {
       let options = targetLex.bnf;
 
       if (options instanceof Array) {
+        // Push this rule onto the parse stack
+        this.parseStack.push(type.name);
+        
         optionsLoop: for (const phases of options) {
           if (out) break;
 
@@ -575,7 +810,7 @@ export class Parser {
               let got = readToken(tmpTxt, phases[i] as RegExp);
 
               if (!got) {
-                this.recordFailure(offset + position, (phases[i] as RegExp).source);
+                this.recordFailure(offset + position, phases[i] as RegExp);
                 continue optionsLoop;
               }
 
@@ -608,6 +843,9 @@ export class Parser {
               );
           }
         }
+        
+        // Pop this rule from the parse stack
+        this.parseStack.pop();
       }
 
       if (out && targetLex.simplifyWhenOneChildren && out.children.length == 1) {

@@ -28,6 +28,7 @@ value ::= "true" | "false" | "null"
         expect(e.position.offset).toBe(0);
         expect(e.position.line).toBe(1);
         expect(e.position.column).toBe(1);
+        expect(e.found).toBe('invalid');
       }
     });
 
@@ -40,8 +41,13 @@ value ::= "true" | "false" | "null"
         expect(e.expected).toBeDefined();
         expect(Array.isArray(e.expected)).toBe(true);
         expect(e.expected.length).toBeGreaterThan(0);
-        // Should expect one of the literals from the grammar
-        expect(e.expected).toEqual(expect.arrayContaining([expect.stringMatching(/true|false|null/)]));
+        // Should expect the parent rule
+        expect(e.expected).toEqual(['value']);
+        // The found property should contain the actual text
+        expect(e.found).toBe('invalid');
+        // The failure tree should contain the alternatives
+        expect(e.failureTree).toBeDefined();
+        expect(e.failureTree.length).toBeGreaterThan(0);
       }
     });
 
@@ -52,7 +58,8 @@ value ::= "true" | "false" | "null"
       } catch (e) {
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.found).toBeDefined();
-        expect(e.found).toBe('i');
+        // Should capture the full token, not just a single character
+        expect(e.found).toBe('invalid');
       }
     });
 
@@ -183,9 +190,131 @@ value ::= "true" | "false" | "null"
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.position).toBeDefined();
         expect(e.expected).toBeDefined();
-        expect(e.expected).toBe(['value']);
+        expect(e.expected).toEqual(['value']);
+        
+        // Verify the found property shows the actual text that failed
+        expect(e.found).toBe('tru');
+        
+        // Verify the failureTree structure
+        expect(e.failureTree).toBeDefined();
+        expect(e.failureTree.length).toBe(1);
+        
+        // The failureTree should start at 'value' (the location of the failure)
+        const valueNode = e.failureTree[0];
+        expect(valueNode.name).toBe('value');
+        expect(valueNode.children).toBeDefined();
+        expect(valueNode.children.length).toBeGreaterThan(0);
+        
+        // Verify that alternatives have the expected structure
+        const objectNode = valueNode.children.find(node => node.name === 'object');
+        expect(objectNode).toBeDefined();
+        expect(objectNode.expected).toBe('{');
+        
+        const arrayNode = valueNode.children.find(node => node.name === 'array');
+        expect(arrayNode).toBeDefined();
+        expect(arrayNode.expected).toBe('[');
+        
+        const numberNode = valueNode.children.find(node => node.name === 'number');
+        expect(numberNode).toBeDefined();
+        expect(numberNode.expected).toBeInstanceOf(RegExp);
+        expect((numberNode.expected as RegExp).source).toBe('[0-9]');
+        
+        const trueNode = valueNode.children.find(node => node.name === '"true"');
+        expect(trueNode).toBeDefined();
+        expect(trueNode.expected).toBe('true');
+      }
+    });
 
-        console.log(e)
+    it('should report correct position for missing closing brace', () => {
+      const input = '{"key": "value"';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.position.offset).toBeGreaterThan(0);
+        expect(e.expected).toBeDefined();
+        expect(e.found).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should report error for invalid array syntax', () => {
+      const input = '[1, 2, ]';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toEqual(['value']);
+        expect(e.found).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+        // Verify the failure tree contains the alternatives that were tried
+        expect(e.failureTree.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should report error for missing colon in object', () => {
+      const input = '{"key" "value"}';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toBeDefined();
+        expect(e.found).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should report error for incomplete string literal', () => {
+      const input = '{"key": "incomplete';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toBeDefined();
+        expect(e.found).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should report error at correct position in nested structure', () => {
+      const input = '{"outer": {"inner": invalid}}';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.position.offset).toBeGreaterThan(0);
+        expect(e.expected).toEqual(['value']);
+        expect(e.found).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should provide failure tree for complex nested failures', () => {
+      const input = '{"a": [1, {]';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.found).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+        // Verify the failure tree structure exists
+        expect(Array.isArray(e.failureTree)).toBe(true);
+        // The tree should contain information about what was expected
+        expect(e.failureTree.length).toBeGreaterThan(0);
+        const hasNameProperty = e.failureTree.every(node => node.hasOwnProperty('name'));
+        expect(hasNameProperty).toBe(true);
       }
     });
   });

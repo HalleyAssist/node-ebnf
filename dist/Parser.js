@@ -1,7 +1,11 @@
 "use strict";
 // https://www.ics.uci.edu/~pattis/ICS-33/lectures/ebnf.pdf
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Parser = exports.findRuleByName = exports.parseRuleName = exports.escapeRegExp = exports.readToken = void 0;
+exports.Parser = void 0;
+exports.readToken = readToken;
+exports.escapeRegExp = escapeRegExp;
+exports.parseRuleName = parseRuleName;
+exports.findRuleByName = findRuleByName;
 const UPPER_SNAKE_RE = /^[A-Z0-9_]+$/;
 const decorationRE = /(\?|\+|\*)$/;
 const preDecorationRE = /^(@|&|!)/;
@@ -27,11 +31,9 @@ function readToken(txt, expr) {
     }
     return null;
 }
-exports.readToken = readToken;
 function escapeRegExp(str) {
     return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
 }
-exports.escapeRegExp = escapeRegExp;
 function fixRest(token) {
     token.rest = '';
     if (token.children) {
@@ -82,12 +84,10 @@ function parseRuleName(name) {
     out.lookup = out.lookupNegative || out.lookupPositive;
     return out;
 }
-exports.parseRuleName = parseRuleName;
 function findRuleByName(name, parser) {
     let parsed = parseRuleName(name);
     return parser.cachedRules[parsed.name] || null;
 }
-exports.findRuleByName = findRuleByName;
 /// Removes all the nodes starting with 'RULE_'
 function stripRules(token, re) {
     if (token.children) {
@@ -110,6 +110,7 @@ class Parser {
         this.options = options;
         this.furthestFailure = null;
         this.originalInput = '';
+        this.parseStack = []; // Track parsing context
         this.cachedRules = {};
         this.debug = options ? options.debug === true : false;
         let errors = [];
@@ -175,6 +176,7 @@ class Parser {
         // Reset failure tracking for each new parse
         this.furthestFailure = null;
         this.originalInput = txt;
+        this.parseStack = [];
         let result = this.parse(txt, target, 0, 0);
         if (result) {
             agregateErrors(result.errors, result);
@@ -194,9 +196,12 @@ class Parser {
             // Parsing failed completely - throw ParsingError
             if (this.furthestFailure) {
                 const position = this.calculatePosition(this.originalInput, this.furthestFailure.offset);
-                const expected = Array.from(this.furthestFailure.expected);
                 const found = this.furthestFailure.found;
-                throw new ParsingError_1.ParsingError('Failed to parse input', position, expected, found);
+                // Extract parent-most rules first
+                const parentMostRules = this.extractParentMostRules(this.furthestFailure.tree);
+                // Build failure tree starting from the parent-most failing rules
+                const failureTree = this.buildFailureTree(this.furthestFailure.tree, parentMostRules, this.furthestFailure.regexMap);
+                throw new ParsingError_1.ParsingError('Failed to parse input', position, parentMostRules, found, failureTree);
             }
             else {
                 // Fallback if no failure was tracked
@@ -229,21 +234,222 @@ class Parser {
         return { offset, line, column };
     }
     recordFailure(offset, expected) {
+        const expectedKey = expected instanceof RegExp ? expected.source : expected;
         if (!this.furthestFailure || offset > this.furthestFailure.offset) {
             // This is a new furthest failure
-            const found = offset < this.originalInput.length
-                ? this.originalInput.charAt(offset)
-                : 'end of input';
+            let found;
+            if (offset >= this.originalInput.length) {
+                found = 'end of input';
+            }
+            else {
+                // Extract a meaningful token/substring from the failure position
+                const remaining = this.originalInput.substring(offset);
+                // Skip whitespace using replace
+                const trimmed = remaining.replace(/^\s+/, '');
+                if (trimmed.length === 0) {
+                    found = 'end of input';
+                }
+                else {
+                    // Try to extract a word/token (alphanumeric + some symbols)
+                    const match = trimmed.match(/^[^\s\}\]\),;]+/);
+                    if (match && match[0].length > 0) {
+                        found = match[0];
+                    }
+                    else {
+                        // Fallback to first character after whitespace
+                        found = trimmed.charAt(0);
+                    }
+                }
+            }
             this.furthestFailure = {
                 offset,
-                expected: new Set([expected]),
-                found
+                expected: new Set([expectedKey]),
+                found,
+                tree: new Map(),
+                regexMap: new Map()
             };
+            // Store regex instance if it's a RegExp
+            if (expected instanceof RegExp) {
+                this.furthestFailure.regexMap.set(expected.source, expected);
+            }
+            this.recordParentChildRelationship(expected);
+            this.furthestFailure.expected.add(expectedKey);
         }
         else if (offset === this.furthestFailure.offset) {
             // Same position, add to expected set
-            this.furthestFailure.expected.add(expected);
+            this.furthestFailure.expected.add(expectedKey);
+            // Store regex instance if it's a RegExp
+            if (expected instanceof RegExp) {
+                this.furthestFailure.regexMap.set(expected.source, expected);
+            }
+            this.recordParentChildRelationship(expected);
         }
+    }
+    recordParentChildRelationship(expected) {
+        if (!this.furthestFailure)
+            return;
+        if (this.parseStack.length > 0) {
+            const parent = this.parseStack[this.parseStack.length - 1];
+            if (!this.furthestFailure.tree.has(parent)) {
+                this.furthestFailure.tree.set(parent, new Set());
+            }
+            this.furthestFailure.tree.get(parent).add(expected);
+        }
+        else {
+            // No parent, this is a top-level failure
+            if (!this.furthestFailure.tree.has('__ROOT__')) {
+                this.furthestFailure.tree.set('__ROOT__', new Set());
+            }
+            this.furthestFailure.tree.get('__ROOT__').add(expected);
+        }
+    }
+    extractParentMostRules(tree) {
+        // The "parent most failing option" is the rule we were trying to match
+        // when all its alternatives failed. In the tree structure, this is typically
+        // the direct child of the top-most parent that has alternatives.
+        // Helper to get string name from value
+        const getName = (value) => value instanceof RegExp ? value.source : value;
+        // If we have __ROOT__, find its direct children that have alternatives
+        if (tree.has('__ROOT__')) {
+            const rootChildren = Array.from(tree.get('__ROOT__')).map(getName);
+            // Return root children that have their own children (alternatives)
+            const result = rootChildren.filter(child => tree.has(child) && tree.get(child).size > 0);
+            if (result.length > 0) {
+                return result;
+            }
+            // If none have children, return the root children themselves
+            return rootChildren;
+        }
+        // Find the top-most parent (not a child of any other parent)
+        const allChildren = new Set();
+        const allParents = new Set();
+        for (const [parent, children] of tree.entries()) {
+            allParents.add(parent);
+            for (const child of children) {
+                allChildren.add(getName(child));
+            }
+        }
+        const topMostParents = Array.from(allParents).filter(parent => !allChildren.has(parent));
+        // For each top-most parent, get its direct children that have alternatives
+        const result = [];
+        for (const parent of topMostParents) {
+            if (tree.has(parent)) {
+                const children = Array.from(tree.get(parent));
+                for (const child of children) {
+                    const childName = getName(child);
+                    if (tree.has(childName) && tree.get(childName).size > 0) {
+                        result.push(childName);
+                    }
+                }
+            }
+        }
+        if (result.length > 0) {
+            return result;
+        }
+        // Fallback: return top-most parents
+        if (topMostParents.length > 0) {
+            return topMostParents;
+        }
+        // Last fallback: return all unique rules
+        return Array.from(new Set([...allParents, ...allChildren]));
+    }
+    /**
+     * Determines if a value represents a terminal/literal rather than a non-terminal rule.
+     */
+    isLiteralOrTerminal(value) {
+        if (value instanceof RegExp) {
+            return true;
+        }
+        // Check if it's a literal (starts with " or ')
+        if (value.startsWith('"') || value.startsWith("'")) {
+            return true;
+        }
+        // Check if it's a regex pattern (starts with [ or contains #x followed by hex digits)
+        if (value.startsWith('[') || /\#x[0-9a-fA-F]/.test(value)) {
+            return true;
+        }
+        return false;
+    }
+    /**
+     * Extracts the expected value from a terminal/literal.
+     * - For string literals (quoted), removes the quotes and returns the content
+     * - For regex patterns, returns the RegExp instance
+     */
+    extractExpectedValue(value, regexMap) {
+        if (value instanceof RegExp) {
+            return value;
+        }
+        // If it's a string literal (starts with " or '), parse it to remove quotes
+        if (value.startsWith('"')) {
+            try {
+                return JSON.parse(value);
+            }
+            catch (_a) {
+                return value;
+            }
+        }
+        else if (value.startsWith("'")) {
+            // Single-quoted string - remove quotes
+            return value.replace(/^'(.+)'$/, '$1').replace(/\\'/g, "'");
+        }
+        // Check if this is a regex pattern string that we have a RegExp instance for
+        if (regexMap.has(value)) {
+            return regexMap.get(value);
+        }
+        // For other terminals, return as-is
+        return value;
+    }
+    buildFailureTree(tree, startRules, regexMap) {
+        const buildNode = (value) => {
+            const name = value instanceof RegExp ? value.source : value;
+            const node = { name };
+            if (tree.has(name)) {
+                const children = Array.from(tree.get(name));
+                if (children.length > 0) {
+                    // If this rule has exactly one child and that child is a terminal,
+                    // set expected to that terminal instead of creating children
+                    if (children.length === 1 && this.isLiteralOrTerminal(children[0])) {
+                        node.expected = this.extractExpectedValue(children[0], regexMap || new Map());
+                    }
+                    else {
+                        // Build child nodes
+                        const childNodes = children.map(child => buildNode(child));
+                        // Check if this node should be flattened:
+                        // If it has exactly one child AND that child has an expected value (is terminal)
+                        if (childNodes.length === 1 && childNodes[0].expected !== undefined && childNodes[0].children === undefined) {
+                            node.expected = childNodes[0].expected;
+                        }
+                        else {
+                            node.children = childNodes;
+                        }
+                    }
+                }
+            }
+            else if (this.isLiteralOrTerminal(value)) {
+                // If this is a terminal/literal with no children, set expected to itself
+                node.expected = this.extractExpectedValue(value, regexMap || new Map());
+            }
+            return node;
+        };
+        // If startRules are provided, start from those rules
+        if (startRules && startRules.length > 0) {
+            return startRules.map(rule => buildNode(rule));
+        }
+        // Start from root if it exists, otherwise from parent-most rules
+        if (tree.has('__ROOT__')) {
+            const rootChildren = Array.from(tree.get('__ROOT__'));
+            return rootChildren.map(child => buildNode(child));
+        }
+        // Find parent-most rules (rules that are not children of other rules)
+        const allChildren = new Set();
+        for (const children of tree.values()) {
+            for (const child of children) {
+                const childName = child instanceof RegExp ? child.source : child;
+                allChildren.add(childName);
+            }
+        }
+        const parentMost = Array.from(tree.keys()).filter(parent => !allChildren.has(parent));
+        return parentMost.map(parent => buildNode(parent));
     }
     parse(txt, target, recursion = 0, offset = 0) {
         let out = null;
@@ -320,6 +526,8 @@ class Parser {
         else {
             let options = targetLex.bnf;
             if (options instanceof Array) {
+                // Push this rule onto the parse stack
+                this.parseStack.push(type.name);
                 optionsLoop: for (const phases of options) {
                     if (out)
                         break;
@@ -462,7 +670,7 @@ class Parser {
                         else {
                             let got = readToken(tmpTxt, phases[i]);
                             if (!got) {
-                                this.recordFailure(offset + position, phases[i].source);
+                                this.recordFailure(offset + position, phases[i]);
                                 continue optionsLoop;
                             }
                             printable &&
@@ -483,6 +691,8 @@ class Parser {
                             console.log(new Array(recursion).join('│  ') + '├<─┴< PUSHING ' + out.type + ' ' + JSON.stringify(out.text));
                     }
                 }
+                // Pop this rule from the parse stack
+                this.parseStack.pop();
             }
             if (out && targetLex.simplifyWhenOneChildren && out.children.length == 1) {
                 out = out.children[0];
