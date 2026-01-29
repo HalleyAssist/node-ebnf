@@ -226,8 +226,6 @@ namespace BNF {
     return acumulator.join('\n');
   }
 
-  let subitems = 0;
-
   function restar(total, resta) {
     console.log('reberia restar ' + resta + ' a ' + total);
     throw new Error('Difference not supported yet');
@@ -242,10 +240,11 @@ namespace BNF {
     return new RegExp(pattern, caseInsensitive ? 'i' : '');
   }
 
-  function getSubItems(tmpRules, seq: IToken, parentName: string, caseInsensitive: boolean = false) {
+  function getSubItems(tmpRules, seq: IToken, parentName: string, optionIndex: number, caseInsensitive: boolean = false) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
+    let subitemIndex = 0; // Track subitems within this sequence
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -261,7 +260,7 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          let name = '%' + (parentName + subitems++);
+          let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
 
           createRule(tmpRules, x, name, caseInsensitive);
 
@@ -289,7 +288,7 @@ namespace BNF {
         case 'CharClass':
           if (decoration || preDecoration) {
             let newRule = {
-              name: '%' + (parentName + subitems++),
+              name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
               bnf: [[convertRegex(x.text, caseInsensitive)]]
             };
 
@@ -317,7 +316,8 @@ namespace BNF {
     const operatorNode = token.children.find(x => x.type == 'ProductionOperator');
     const isCaseInsensitive = caseInsensitive || (operatorNode && operatorNode.text === '||=');
 
-    let bnf = token.children.filter(x => x.type == 'SequenceOrDifference').map(s => getSubItems(tmpRules, s, name, isCaseInsensitive));
+    let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, isCaseInsensitive));
 
     let rule: IRule = {
       name,

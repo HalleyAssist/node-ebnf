@@ -210,7 +210,7 @@ var BNF;
     }
     /// Returns true if the rule is a string literal or regular expression without a descendant tree
     function isLonelyRule(name, parser) {
-        let rule = (0, Parser_1.findRuleByName)(name, parser);
+        let rule = Parser_1.findRuleByName(name, parser);
         return (rule &&
             rule.bnf.length == 1 &&
             rule.bnf[0].length == 1 &&
@@ -220,7 +220,7 @@ var BNF;
         return rules.map(x => getBNFRule(x, parser)).join(' ');
     }
     function getBNFBody(name, parser) {
-        let rule = (0, Parser_1.findRuleByName)(name, parser);
+        let rule = Parser_1.findRuleByName(name, parser);
         if (rule)
             return rule.bnf.map(x => getBNFChoice(x, parser)).join(' | ');
         return 'RULE_NOT_FOUND {' + name + '}';
@@ -236,7 +236,6 @@ var BNF;
         return acumulator.join('\n');
     }
     BNF.emit = emit;
-    let subitems = 0;
     function restar(total, resta) {
         console.log('reberia restar ' + resta + ' a ' + total);
         throw new Error('Difference not supported yet');
@@ -248,10 +247,11 @@ var BNF;
             .replace(/#x([a-zA-Z0-9]{2})/g, '\\x$1')
             .replace(/#x([a-zA-Z0-9]{1})/g, '\\x0$1'));
     }
-    function getSubItems(tmpRules, seq, parentName, parentAttributes) {
+    function getSubItems(tmpRules, seq, parentName, optionIndex, parentAttributes) {
         let anterior = null;
         let bnfSeq = [];
         const children = seq.children;
+        let subitemIndex = 0; // Track subitems within this sequence
         for (let i = 0; i < children.length; i++) {
             const x = children[i];
             if (x.type == 'Minus') {
@@ -269,7 +269,7 @@ var BNF;
             }
             switch (x.type) {
                 case 'SubItem':
-                    let name = '%' + (parentName + subitems++);
+                    let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
                     createRule(tmpRules, x, name, parentAttributes);
                     bnfSeq.push(preDecoration + name + decoration);
                     break;
@@ -286,7 +286,7 @@ var BNF;
                                 bnfSeq.push(new RegExp("[" + c.toUpperCase() + c.toLowerCase() + "]"));
                             }
                             else {
-                                bnfSeq.push(new RegExp((0, Parser_1.escapeRegExp)(c)));
+                                bnfSeq.push(new RegExp(Parser_1.escapeRegExp(c)));
                             }
                         }
                     }
@@ -295,7 +295,7 @@ var BNF;
                 case 'CharClass':
                     if (decoration || preDecoration) {
                         let newRule = {
-                            name: '%' + (parentName + subitems++),
+                            name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
                             bnf: [[convertRegex(x.text)]],
                             pinned
                         };
@@ -330,7 +330,8 @@ var BNF;
                 }
             }
         }
-        let bnf = token.children.filter(x => x.type == 'SequenceOrDifference').map(s => getSubItems(tmpRules, s, name, parentAttributes ? parentAttributes : attributes));
+        let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
+        let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
         let rule = {
             name,
             bnf

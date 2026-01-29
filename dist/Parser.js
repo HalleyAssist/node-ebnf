@@ -1,11 +1,7 @@
 "use strict";
 // https://www.ics.uci.edu/~pattis/ICS-33/lectures/ebnf.pdf
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Parser = void 0;
-exports.readToken = readToken;
-exports.escapeRegExp = escapeRegExp;
-exports.parseRuleName = parseRuleName;
-exports.findRuleByName = findRuleByName;
+exports.Parser = exports.findRuleByName = exports.parseRuleName = exports.escapeRegExp = exports.readToken = void 0;
 const UPPER_SNAKE_RE = /^[A-Z0-9_]+$/;
 const decorationRE = /(\?|\+|\*)$/;
 const preDecorationRE = /^(@|&|!)/;
@@ -31,9 +27,11 @@ function readToken(txt, expr) {
     }
     return null;
 }
+exports.readToken = readToken;
 function escapeRegExp(str) {
     return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
 }
+exports.escapeRegExp = escapeRegExp;
 function fixRest(token) {
     token.rest = '';
     if (token.children) {
@@ -84,10 +82,12 @@ function parseRuleName(name) {
     out.lookup = out.lookupNegative || out.lookupPositive;
     return out;
 }
+exports.parseRuleName = parseRuleName;
 function findRuleByName(name, parser) {
     let parsed = parseRuleName(name);
     return parser.cachedRules[parsed.name] || null;
 }
+exports.findRuleByName = findRuleByName;
 /// Removes all the nodes starting with 'RULE_'
 function stripRules(token, re) {
     if (token.children) {

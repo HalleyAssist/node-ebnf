@@ -43,6 +43,7 @@ terminal.glue
 *.zip
 .alm
 test/*.js
+src/**/*.js
 
 src/typings
 test/typings
