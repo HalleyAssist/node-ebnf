@@ -187,8 +187,6 @@ value ::= "true" | "false" | "null"
         expect(e.position).toBeDefined();
         expect(e.expected).toBeDefined();
         expect(e.expected).toEqual(['value']);
-
-        console.log(e)
       }
     });
 

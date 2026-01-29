@@ -244,41 +244,31 @@ class Parser {
                 found,
                 tree: new Map()
             };
-            // Record parent-child relationship
-            if (this.parseStack.length > 0) {
-                const parent = this.parseStack[this.parseStack.length - 1];
-                if (!this.furthestFailure.tree.has(parent)) {
-                    this.furthestFailure.tree.set(parent, new Set());
-                }
-                this.furthestFailure.tree.get(parent).add(expected);
-            }
-            else {
-                // No parent, this is a top-level failure
-                if (!this.furthestFailure.tree.has('__ROOT__')) {
-                    this.furthestFailure.tree.set('__ROOT__', new Set());
-                }
-                this.furthestFailure.tree.get('__ROOT__').add(expected);
-            }
+            this.recordParentChildRelationship(expected);
             this.furthestFailure.expected.add(expected);
         }
         else if (offset === this.furthestFailure.offset) {
             // Same position, add to expected set
             this.furthestFailure.expected.add(expected);
-            // Record parent-child relationship
-            if (this.parseStack.length > 0) {
-                const parent = this.parseStack[this.parseStack.length - 1];
-                if (!this.furthestFailure.tree.has(parent)) {
-                    this.furthestFailure.tree.set(parent, new Set());
-                }
-                this.furthestFailure.tree.get(parent).add(expected);
+            this.recordParentChildRelationship(expected);
+        }
+    }
+    recordParentChildRelationship(expected) {
+        if (!this.furthestFailure)
+            return;
+        if (this.parseStack.length > 0) {
+            const parent = this.parseStack[this.parseStack.length - 1];
+            if (!this.furthestFailure.tree.has(parent)) {
+                this.furthestFailure.tree.set(parent, new Set());
             }
-            else {
-                // No parent, this is a top-level failure
-                if (!this.furthestFailure.tree.has('__ROOT__')) {
-                    this.furthestFailure.tree.set('__ROOT__', new Set());
-                }
-                this.furthestFailure.tree.get('__ROOT__').add(expected);
+            this.furthestFailure.tree.get(parent).add(expected);
+        }
+        else {
+            // No parent, this is a top-level failure
+            if (!this.furthestFailure.tree.has('__ROOT__')) {
+                this.furthestFailure.tree.set('__ROOT__', new Set());
             }
+            this.furthestFailure.tree.get('__ROOT__').add(expected);
         }
     }
     extractParentMostRules(tree) {

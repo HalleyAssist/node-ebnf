@@ -6,7 +6,7 @@ const preDecorationRE = /^(@|&|!)/;
 const WS_RULE = 'WS';
 
 import { TokenError } from './TokenError';
-import { ParsingError, IParsingErrorPosition } from './ParsingError';
+import { ParsingError, IParsingErrorPosition, IFailureTreeNode } from './ParsingError';
 
 export type RulePrimary = string | RegExp;
 
@@ -327,40 +327,30 @@ export class Parser {
         tree: new Map()
       };
       
-      // Record parent-child relationship
-      if (this.parseStack.length > 0) {
-        const parent = this.parseStack[this.parseStack.length - 1];
-        if (!this.furthestFailure.tree.has(parent)) {
-          this.furthestFailure.tree.set(parent, new Set());
-        }
-        this.furthestFailure.tree.get(parent)!.add(expected);
-      } else {
-        // No parent, this is a top-level failure
-        if (!this.furthestFailure.tree.has('__ROOT__')) {
-          this.furthestFailure.tree.set('__ROOT__', new Set());
-        }
-        this.furthestFailure.tree.get('__ROOT__')!.add(expected);
-      }
-      
+      this.recordParentChildRelationship(expected);
       this.furthestFailure.expected.add(expected);
     } else if (offset === this.furthestFailure.offset) {
       // Same position, add to expected set
       this.furthestFailure.expected.add(expected);
-      
-      // Record parent-child relationship
-      if (this.parseStack.length > 0) {
-        const parent = this.parseStack[this.parseStack.length - 1];
-        if (!this.furthestFailure.tree.has(parent)) {
-          this.furthestFailure.tree.set(parent, new Set());
-        }
-        this.furthestFailure.tree.get(parent)!.add(expected);
-      } else {
-        // No parent, this is a top-level failure
-        if (!this.furthestFailure.tree.has('__ROOT__')) {
-          this.furthestFailure.tree.set('__ROOT__', new Set());
-        }
-        this.furthestFailure.tree.get('__ROOT__')!.add(expected);
+      this.recordParentChildRelationship(expected);
+    }
+  }
+
+  private recordParentChildRelationship(expected: string) {
+    if (!this.furthestFailure) return;
+    
+    if (this.parseStack.length > 0) {
+      const parent = this.parseStack[this.parseStack.length - 1];
+      if (!this.furthestFailure.tree.has(parent)) {
+        this.furthestFailure.tree.set(parent, new Set());
       }
+      this.furthestFailure.tree.get(parent)!.add(expected);
+    } else {
+      // No parent, this is a top-level failure
+      if (!this.furthestFailure.tree.has('__ROOT__')) {
+        this.furthestFailure.tree.set('__ROOT__', new Set());
+      }
+      this.furthestFailure.tree.get('__ROOT__')!.add(expected);
     }
   }
 
@@ -420,9 +410,9 @@ export class Parser {
     return Array.from(new Set([...allParents, ...allChildren]));
   }
 
-  private buildFailureTree(tree: Map<string, Set<string>>): any[] {
-    const buildNode = (ruleName: string): any => {
-      const node: any = { rule: ruleName };
+  private buildFailureTree(tree: Map<string, Set<string>>): IFailureTreeNode[] {
+    const buildNode = (ruleName: string): IFailureTreeNode => {
+      const node: IFailureTreeNode = { rule: ruleName };
       if (tree.has(ruleName)) {
         const children = Array.from(tree.get(ruleName)!);
         if (children.length > 0) {

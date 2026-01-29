@@ -57,6 +57,7 @@ export declare class Parser {
     emitSource(): string;
     private calculatePosition;
     private recordFailure;
+    private recordParentChildRelationship;
     private extractParentMostRules;
     private buildFailureTree;
     parse(txt: string, target: string, recursion?: number, offset?: number): IToken;
