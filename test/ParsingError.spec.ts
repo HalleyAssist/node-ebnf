@@ -191,5 +191,92 @@ value ::= "true" | "false" | "null"
         console.log(e)
       }
     });
+
+    it('should report correct position for missing closing brace', () => {
+      const input = '{"key": "value"';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.position.offset).toBeGreaterThan(0);
+        expect(e.expected).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should report error for invalid array syntax', () => {
+      const input = '[1, 2, ]';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toEqual(['value']);
+        expect(e.failureTree).toBeDefined();
+        // Verify the failure tree contains the alternatives that were tried
+        expect(e.failureTree.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should report error for missing colon in object', () => {
+      const input = '{"key" "value"}';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should report error for incomplete string literal', () => {
+      const input = '{"key": "incomplete';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.expected).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should report error at correct position in nested structure', () => {
+      const input = '{"outer": {"inner": invalid}}';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.position.offset).toBeGreaterThan(0);
+        expect(e.expected).toEqual(['value']);
+        expect(e.failureTree).toBeDefined();
+      }
+    });
+
+    it('should provide failure tree for complex nested failures', () => {
+      const input = '{"a": [1, {]';
+      try {
+        parser.getAST(input);
+        throw new Error('Should have thrown ParsingError');
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParsingError);
+        expect(e.position).toBeDefined();
+        expect(e.failureTree).toBeDefined();
+        // Verify the failure tree structure exists
+        expect(Array.isArray(e.failureTree)).toBe(true);
+        // The tree should contain information about what was expected
+        expect(e.failureTree.length).toBeGreaterThan(0);
+        const hasRuleProperty = e.failureTree.every(node => node.hasOwnProperty('rule'));
+        expect(hasRuleProperty).toBe(true);
+      }
+    });
   });
 });
