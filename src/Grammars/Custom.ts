@@ -269,11 +269,12 @@ namespace BNF {
     );
   }
 
-  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any) {
+  function getSubItems(tmpRules: IRule[], seq: IToken, parentName: string, optionIndex: number, parentAttributes: any, globalFragmentCounter?: {value: number}) {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
     let subitemIndex = 0; // Track subitems within this sequence
+    const isTopLevel = !parentName.startsWith('%');
 
     for (let i = 0; i < children.length; i++) {
       const x = children[i];
@@ -298,7 +299,23 @@ namespace BNF {
 
       switch (x.type) {
         case 'SubItem':
-          let name = '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']';
+          subitemIndex++;
+          let name: string;
+
+          if (globalFragmentCounter) {
+            // Using global counter for single-sequence top-level rules
+            name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+          } else if (isTopLevel) {
+            // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
+            if (subitemIndex === 1) {
+              name = '%' + parentName + '[' + optionIndex + ']';
+            } else {
+              name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+            }
+          } else {
+            // Nested within a fragment, append subitem index (parentName already has %)
+            name = parentName + '[' + subitemIndex + ']';
+          }
 
           createRule(tmpRules, x, name, parentAttributes);
 
@@ -324,8 +341,26 @@ namespace BNF {
         case 'CharCode':
         case 'CharClass':
           if (decoration || preDecoration) {
+            subitemIndex++;
+            let name: string;
+
+            if (globalFragmentCounter) {
+              // Using global counter for single-sequence top-level rules
+              name = '%' + parentName + '[' + (globalFragmentCounter.value++) + ']';
+            } else if (isTopLevel) {
+              // Multiple sequences at top level: first SubItem uses [optionIndex], subsequent use [optionIndex][subitemIndex]
+              if (subitemIndex === 1) {
+                name = '%' + parentName + '[' + optionIndex + ']';
+              } else {
+                name = '%' + parentName + '[' + optionIndex + '][' + subitemIndex + ']';
+              }
+            } else {
+              // Nested within a fragment, append subitem index (parentName already has %)
+              name = parentName + '[' + subitemIndex + ']';
+            }
+
             let newRule: IRule = {
-              name: '%' + parentName + '[' + optionIndex + '][' + (++subitemIndex) + ']',
+              name,
               bnf: [[convertRegex(x.text)]],
               pinned
             };
@@ -367,7 +402,12 @@ namespace BNF {
     }
 
     let sequences = token.children.filter(x => x.type == 'SequenceOrDifference');
-    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes));
+
+    // Use global counter for top-level fragments
+    const isTopLevel = !name.startsWith('%');
+    const globalFragmentCounter = isTopLevel ? {value: 1} : undefined;
+
+    let bnf = sequences.map((s, optionIndex) => getSubItems(tmpRules, s, name, optionIndex + 1, parentAttributes ? parentAttributes : attributes, globalFragmentCounter));
 
     let rule: IRule = {
       name,
