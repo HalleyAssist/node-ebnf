@@ -40,8 +40,11 @@ value ::= "true" | "false" | "null"
         expect(e.expected).toBeDefined();
         expect(Array.isArray(e.expected)).toBe(true);
         expect(e.expected.length).toBeGreaterThan(0);
-        // Should expect one of the literals from the grammar
-        expect(e.expected).toEqual(expect.arrayContaining([expect.stringMatching(/true|false|null/)]));
+        // Should expect the parent rule
+        expect(e.expected).toEqual(['value']);
+        // The failure tree should contain the alternatives
+        expect(e.failureTree).toBeDefined();
+        expect(e.failureTree.length).toBeGreaterThan(0);
       }
     });
 
@@ -183,7 +186,7 @@ value ::= "true" | "false" | "null"
         expect(e).toBeInstanceOf(ParsingError);
         expect(e.position).toBeDefined();
         expect(e.expected).toBeDefined();
-        expect(e.expected).toBe(['value']);
+        expect(e.expected).toEqual(['value']);
 
         console.log(e)
       }

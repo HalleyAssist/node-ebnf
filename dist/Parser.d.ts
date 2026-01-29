@@ -50,12 +50,15 @@ export declare class Parser {
     private readonly debug;
     private furthestFailure;
     private originalInput;
+    private parseStack;
     cachedRules: IDictionary<IRule>;
     constructor(grammarRules: IRule[], options?: Partial<IParserOptions>);
     getAST(txt: string, target?: string): IToken;
     emitSource(): string;
     private calculatePosition;
     private recordFailure;
+    private extractParentMostRules;
+    private buildFailureTree;
     parse(txt: string, target: string, recursion?: number, offset?: number): IToken;
     private parseRecovery;
 }

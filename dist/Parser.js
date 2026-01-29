@@ -110,6 +110,7 @@ class Parser {
         this.options = options;
         this.furthestFailure = null;
         this.originalInput = '';
+        this.parseStack = []; // Track parsing context
         this.cachedRules = {};
         this.debug = options ? options.debug === true : false;
         let errors = [];
@@ -175,6 +176,7 @@ class Parser {
         // Reset failure tracking for each new parse
         this.furthestFailure = null;
         this.originalInput = txt;
+        this.parseStack = [];
         let result = this.parse(txt, target, 0, 0);
         if (result) {
             agregateErrors(result.errors, result);
@@ -194,9 +196,11 @@ class Parser {
             // Parsing failed completely - throw ParsingError
             if (this.furthestFailure) {
                 const position = this.calculatePosition(this.originalInput, this.furthestFailure.offset);
-                const expected = Array.from(this.furthestFailure.expected);
                 const found = this.furthestFailure.found;
-                throw new ParsingError_1.ParsingError('Failed to parse input', position, expected, found);
+                // Build failure tree and extract parent-most rules
+                const failureTree = this.buildFailureTree(this.furthestFailure.tree);
+                const parentMostRules = this.extractParentMostRules(this.furthestFailure.tree);
+                throw new ParsingError_1.ParsingError('Failed to parse input', position, parentMostRules, found, failureTree);
             }
             else {
                 // Fallback if no failure was tracked
@@ -237,13 +241,118 @@ class Parser {
             this.furthestFailure = {
                 offset,
                 expected: new Set([expected]),
-                found
+                found,
+                tree: new Map()
             };
+            // Record parent-child relationship
+            if (this.parseStack.length > 0) {
+                const parent = this.parseStack[this.parseStack.length - 1];
+                if (!this.furthestFailure.tree.has(parent)) {
+                    this.furthestFailure.tree.set(parent, new Set());
+                }
+                this.furthestFailure.tree.get(parent).add(expected);
+            }
+            else {
+                // No parent, this is a top-level failure
+                if (!this.furthestFailure.tree.has('__ROOT__')) {
+                    this.furthestFailure.tree.set('__ROOT__', new Set());
+                }
+                this.furthestFailure.tree.get('__ROOT__').add(expected);
+            }
+            this.furthestFailure.expected.add(expected);
         }
         else if (offset === this.furthestFailure.offset) {
             // Same position, add to expected set
             this.furthestFailure.expected.add(expected);
+            // Record parent-child relationship
+            if (this.parseStack.length > 0) {
+                const parent = this.parseStack[this.parseStack.length - 1];
+                if (!this.furthestFailure.tree.has(parent)) {
+                    this.furthestFailure.tree.set(parent, new Set());
+                }
+                this.furthestFailure.tree.get(parent).add(expected);
+            }
+            else {
+                // No parent, this is a top-level failure
+                if (!this.furthestFailure.tree.has('__ROOT__')) {
+                    this.furthestFailure.tree.set('__ROOT__', new Set());
+                }
+                this.furthestFailure.tree.get('__ROOT__').add(expected);
+            }
         }
+    }
+    extractParentMostRules(tree) {
+        // The "parent most failing option" is the rule we were trying to match
+        // when all its alternatives failed. In the tree structure, this is typically
+        // the direct child of the top-most parent that has alternatives.
+        // If we have __ROOT__, find its direct children that have alternatives
+        if (tree.has('__ROOT__')) {
+            const rootChildren = Array.from(tree.get('__ROOT__'));
+            // Return root children that have their own children (alternatives)
+            const result = rootChildren.filter(child => tree.has(child) && tree.get(child).size > 0);
+            if (result.length > 0) {
+                return result;
+            }
+            // If none have children, return the root children themselves
+            return rootChildren;
+        }
+        // Find the top-most parent (not a child of any other parent)
+        const allChildren = new Set();
+        const allParents = new Set();
+        for (const [parent, children] of tree.entries()) {
+            allParents.add(parent);
+            for (const child of children) {
+                allChildren.add(child);
+            }
+        }
+        const topMostParents = Array.from(allParents).filter(parent => !allChildren.has(parent));
+        // For each top-most parent, get its direct children that have alternatives
+        const result = [];
+        for (const parent of topMostParents) {
+            if (tree.has(parent)) {
+                const children = Array.from(tree.get(parent));
+                for (const child of children) {
+                    if (tree.has(child) && tree.get(child).size > 0) {
+                        result.push(child);
+                    }
+                }
+            }
+        }
+        if (result.length > 0) {
+            return result;
+        }
+        // Fallback: return top-most parents
+        if (topMostParents.length > 0) {
+            return topMostParents;
+        }
+        // Last fallback: return all unique rules
+        return Array.from(new Set([...allParents, ...allChildren]));
+    }
+    buildFailureTree(tree) {
+        const buildNode = (ruleName) => {
+            const node = { rule: ruleName };
+            if (tree.has(ruleName)) {
+                const children = Array.from(tree.get(ruleName));
+                if (children.length > 0) {
+                    node.children = children.map(child => buildNode(child));
+                }
+            }
+            return node;
+        };
+        // Start from root if it exists, otherwise from parent-most rules
+        if (tree.has('__ROOT__')) {
+            const rootChildren = Array.from(tree.get('__ROOT__'));
+            return rootChildren.map(child => buildNode(child));
+        }
+        // Find parent-most rules (rules that are not children of other rules)
+        const allChildren = new Set();
+        for (const children of tree.values()) {
+            for (const child of children) {
+                allChildren.add(child);
+            }
+        }
+        const parentMost = Array.from(tree.keys()).filter(parent => !allChildren.has(parent));
+        return parentMost.map(parent => buildNode(parent));
     }
     parse(txt, target, recursion = 0, offset = 0) {
         let out = null;
@@ -320,6 +429,8 @@ class Parser {
         else {
             let options = targetLex.bnf;
             if (options instanceof Array) {
+                // Push this rule onto the parse stack
+                this.parseStack.push(type.name);
                 optionsLoop: for (const phases of options) {
                     if (out)
                         break;
@@ -483,6 +594,8 @@ class Parser {
                             console.log(new Array(recursion).join('│  ') + '├<─┴< PUSHING ' + out.type + ' ' + JSON.stringify(out.text));
                     }
                 }
+                // Pop this rule from the parse stack
+                this.parseStack.pop();
             }
             if (out && targetLex.simplifyWhenOneChildren && out.children.length == 1) {
                 out = out.children[0];
