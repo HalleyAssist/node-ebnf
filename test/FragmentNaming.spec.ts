@@ -69,17 +69,16 @@ describe('Fragment naming', () => {
     const fragmentRules = rules.filter(r => r.fragment);
     const fragmentNames = fragmentRules.map(r => r.name);
 
-    // Should have fragments with [optionIndex][subitemIndex] pattern
-    expect(fragmentRules.length).toBeGreaterThan(0);
+    // Transparent SubItems (containing only other SubItems) should use single-index naming
+    expect(fragmentRules.length).toBe(2);
+    expect(fragmentNames).toContain('%Rule[1]'); // (A B)
+    expect(fragmentNames).toContain('%Rule[2]'); // (C D)
     
-    // Should NOT have %% prefix (no double % for nested subitems)
+    // Should NOT have %% prefix or complex nested indices
     fragmentRules.forEach(rule => {
       expect(rule.name.startsWith('%%')).toBe(false);
+      expect(rule.name.split('[').length).toBeLessThanOrEqual(2); // Only %Rule[N] format
     });
-    
-    // Nested fragments should extend parent name with additional brackets
-    // e.g. %Rule[1][1][1][1] not %%Rule[1][1][1][1]
-    expect(fragmentNames.some(name => name.includes('[') && name.split('[').length > 3)).toBe(true);
   });
 
   it('should use hierarchical indices for Custom grammar fragments', () => {
