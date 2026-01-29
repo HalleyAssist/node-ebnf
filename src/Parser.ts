@@ -410,19 +410,25 @@ export class Parser {
     return Array.from(new Set([...allParents, ...allChildren]));
   }
 
-  private buildFailureTree(tree: Map<string, Set<string>>): IFailureTreeNode[] {
-    const isLiteralOrTerminal = (ruleName: string): boolean => {
-      // Check if it's a literal (starts with " or ')
-      if (ruleName.startsWith('"') || ruleName.startsWith("'")) {
-        return true;
-      }
-      // Check if it's a regex pattern (contains [, ], -, #x, etc.)
-      if (ruleName.includes('[') || ruleName.includes('#x')) {
-        return true;
-      }
-      return false;
-    };
+  /**
+   * Determines if a rule name represents a terminal/literal rather than a non-terminal rule.
+   * Heuristics:
+   * - Starts with " or ' (string literal like "true" or '"')
+   * - Contains '[' or '#x' (regex pattern like [0-9] or #x20)
+   */
+  private isLiteralOrTerminal(ruleName: string): boolean {
+    // Check if it's a literal (starts with " or ')
+    if (ruleName.startsWith('"') || ruleName.startsWith("'")) {
+      return true;
+    }
+    // Check if it's a regex pattern (starts with [ or contains #x followed by hex digits)
+    if (ruleName.startsWith('[') || /\#x[0-9a-fA-F]/.test(ruleName)) {
+      return true;
+    }
+    return false;
+  }
 
+  private buildFailureTree(tree: Map<string, Set<string>>): IFailureTreeNode[] {
     const buildNode = (ruleName: string): IFailureTreeNode => {
       const node: IFailureTreeNode = { name: ruleName };
       
@@ -431,13 +437,13 @@ export class Parser {
         if (children.length > 0) {
           // If this rule has exactly one child and that child is a terminal,
           // set expected to that terminal instead of creating children
-          if (children.length === 1 && isLiteralOrTerminal(children[0])) {
+          if (children.length === 1 && this.isLiteralOrTerminal(children[0])) {
             node.expected = children[0];
           } else {
             node.children = children.map(child => buildNode(child));
           }
         }
-      } else if (isLiteralOrTerminal(ruleName)) {
+      } else if (this.isLiteralOrTerminal(ruleName)) {
         // If this is a terminal/literal with no children, set expected to itself
         node.expected = ruleName;
       }

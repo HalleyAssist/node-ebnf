@@ -59,6 +59,13 @@ export declare class Parser {
     private recordFailure;
     private recordParentChildRelationship;
     private extractParentMostRules;
+    /**
+     * Determines if a rule name represents a terminal/literal rather than a non-terminal rule.
+     * Heuristics:
+     * - Starts with " or ' (string literal like "true" or '"')
+     * - Contains '[' or '#x' (regex pattern like [0-9] or #x20)
+     */
+    private isLiteralOrTerminal;
     private buildFailureTree;
     parse(txt: string, target: string, recursion?: number, offset?: number): IToken;
     private parseRecovery;
