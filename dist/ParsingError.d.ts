@@ -5,7 +5,7 @@ export interface IParsingErrorPosition {
 }
 export interface IFailureTreeNode {
     name: string;
-    expected?: string;
+    expected?: string | RegExp;
     children?: IFailureTreeNode[];
 }
 export declare class ParsingError extends Error {

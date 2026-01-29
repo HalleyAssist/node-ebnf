@@ -60,16 +60,13 @@ export declare class Parser {
     private recordParentChildRelationship;
     private extractParentMostRules;
     /**
-     * Determines if a rule name represents a terminal/literal rather than a non-terminal rule.
-     * Heuristics:
-     * - Starts with " or ' (string literal like "true" or '"')
-     * - Contains '[' or '#x' (regex pattern like [0-9] or #x20)
+     * Determines if a value represents a terminal/literal rather than a non-terminal rule.
      */
     private isLiteralOrTerminal;
     /**
-     * Extracts the expected value from a terminal/literal rule name.
+     * Extracts the expected value from a terminal/literal.
      * - For string literals (quoted), removes the quotes and returns the content
-     * - For regex patterns, returns as-is
+     * - For regex patterns, returns the RegExp instance
      */
     private extractExpectedValue;
     private buildFailureTree;

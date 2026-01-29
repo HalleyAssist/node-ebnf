@@ -207,6 +207,11 @@ value ::= "true" | "false" | "null"
         expect(arrayNode).toBeDefined();
         expect(arrayNode.expected).toBe('[');
         
+        const numberNode = valueNode.children.find(node => node.name === 'number');
+        expect(numberNode).toBeDefined();
+        expect(numberNode.expected).toBeInstanceOf(RegExp);
+        expect((numberNode.expected as RegExp).source).toBe('[0-9]');
+        
         const trueNode = valueNode.children.find(node => node.name === '"true"');
         expect(trueNode).toBeDefined();
         expect(trueNode.expected).toBe('true');
