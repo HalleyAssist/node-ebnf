@@ -1,6 +1,5 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ParsingError = exports.TokenError = exports.Parser = void 0;
 var Parser_1 = require("./Parser");
 Object.defineProperty(exports, "Parser", { enumerable: true, get: function () { return Parser_1.Parser; } });
 var TokenError_1 = require("./TokenError");

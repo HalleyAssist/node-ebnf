@@ -244,7 +244,7 @@ namespace BNF {
     let anterior = null;
     let bnfSeq = [];
     const children = seq.children;
-    
+
     // If no counter provided, create one for this option (top-level call)
     if (!subitemCounter) {
       subitemCounter = {value: 0};
@@ -266,10 +266,10 @@ namespace BNF {
         case 'SubItem':
           // Increment the global subitem counter for this option
           subitemCounter.value++;
-          
+
           let name: string;
           let topLevelOptionIndex: number;
-          
+
           if (parentName.startsWith('%')) {
             // Extract the top-level option index from parent name
             // E.g., "%Rule[2]" -> extract "2"
@@ -279,7 +279,7 @@ namespace BNF {
             // This is a top-level call
             topLevelOptionIndex = optionIndex;
           }
-          
+
           if (subitemCounter.value === 1 && !parentName.startsWith('%')) {
             // First SubItem at top level: ALWAYS use single index
             name = '%' + parentName + '[' + topLevelOptionIndex + ']';
@@ -316,7 +316,7 @@ namespace BNF {
           if (decoration || preDecoration) {
             // Increment the global subitem counter
             subitemCounter.value++;
-            
+
             let topLevelOptionIndex: number;
             if (parentName.startsWith('%')) {
               // Extract the top-level option index from parent name
@@ -325,7 +325,7 @@ namespace BNF {
             } else {
               topLevelOptionIndex = optionIndex;
             }
-            
+
             let baseName = parentName.startsWith('%') ? parentName.substring(1).split('[')[0] : parentName;
             let newRule = {
               name: '%' + baseName + '[' + topLevelOptionIndex + '][' + subitemCounter.value + ']',

@@ -16,6 +16,8 @@ describe('Fragment naming', () => {
     const parser = new Grammars.W3C.Parser(grammar);
     const rules = parser.grammarRules;
 
+    console.log(require('util').inspect(rules, {depth: null}))
+
     // Find fragment rules - they should be named with hierarchical indices
     const fragmentRules = rules.filter(r => r.fragment && r.name.startsWith('%Rule'));
     
@@ -146,7 +148,7 @@ describe('Fragment naming', () => {
       }
     });
   });
-  
+
   it('should handle nesting correctly', () => {
     const grammar = `
       Rule ||= ("a" "b") | ("c" ("d" | "e"))
@@ -154,8 +156,6 @@ describe('Fragment naming', () => {
 
     const parser = new Grammars.W3C.Parser(grammar);
     const rules = parser.grammarRules;
-
-    console.log(require('util').inspect(rules, {depth: null}))
 
     const fragmentRules = rules.filter(r => r.fragment);
     const fragmentNames = fragmentRules.map(r => r.name);
